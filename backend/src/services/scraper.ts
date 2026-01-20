@@ -1,5 +1,5 @@
 import axios from 'axios';
-import * as cheerio from 'cheerio';
+import { load, type CheerioAPI } from 'cheerio';
 import {
   parsePrice,
   ParsedPrice,
@@ -77,7 +77,7 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
   };
 
   try {
-    const response = await axios.get(url, {
+    const response = await axios.get<string>(url, {
       headers: {
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -92,7 +92,7 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
       maxRedirects: 5,
     });
 
-    const $ = cheerio.load(response.data);
+    const $ = load(response.data);
 
     // Try to extract from JSON-LD structured data first
     const jsonLdData = extractJsonLd($);
@@ -131,8 +131,21 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
   return result;
 }
 
+interface JsonLdProduct {
+  '@type'?: string;
+  '@graph'?: JsonLdProduct[];
+  name?: string;
+  image?: string | string[] | { url?: string };
+  offers?: JsonLdOffer | JsonLdOffer[];
+}
+
+interface JsonLdOffer {
+  price?: string | number;
+  priceCurrency?: string;
+}
+
 function extractJsonLd(
-  $: cheerio.CheerioAPI
+  $: CheerioAPI
 ): { name?: string; price?: ParsedPrice; image?: string } | null {
   try {
     const scripts = $('script[type="application/ld+json"]');
@@ -140,7 +153,7 @@ function extractJsonLd(
       const content = $(scripts[i]).html();
       if (!content) continue;
 
-      const data = JSON.parse(content);
+      const data = JSON.parse(content) as JsonLdProduct | JsonLdProduct[];
       const product = findProduct(data);
 
       if (product) {
@@ -155,49 +168,50 @@ function extractJsonLd(
           const offer = Array.isArray(product.offers)
             ? product.offers[0]
             : product.offers;
-          if (offer.price) {
+          if (offer && offer.price) {
             result.price = {
-              price: parseFloat(offer.price),
+              price: parseFloat(String(offer.price)),
               currency: offer.priceCurrency || 'USD',
             };
           }
         }
 
         if (product.image) {
-          result.image = Array.isArray(product.image)
-            ? product.image[0]
-            : typeof product.image === 'string'
-              ? product.image
-              : product.image.url;
+          if (Array.isArray(product.image)) {
+            result.image = product.image[0];
+          } else if (typeof product.image === 'string') {
+            result.image = product.image;
+          } else if (product.image.url) {
+            result.image = product.image.url;
+          }
         }
 
         return result;
       }
     }
-  } catch {
+  } catch (_e) {
     // JSON parse error, continue with other methods
   }
   return null;
 }
 
-function findProduct(data: unknown): Record<string, unknown> | null {
-  if (!data || typeof data !== 'object') return null;
-
-  const obj = data as Record<string, unknown>;
-
-  if (obj['@type'] === 'Product') {
-    return obj;
-  }
+function findProduct(data: JsonLdProduct | JsonLdProduct[]): JsonLdProduct | null {
+  if (!data) return null;
 
   if (Array.isArray(data)) {
     for (const item of data) {
       const found = findProduct(item);
       if (found) return found;
     }
+    return null;
   }
 
-  if (obj['@graph'] && Array.isArray(obj['@graph'])) {
-    for (const item of obj['@graph']) {
+  if (data['@type'] === 'Product') {
+    return data;
+  }
+
+  if (data['@graph'] && Array.isArray(data['@graph'])) {
+    for (const item of data['@graph']) {
       const found = findProduct(item);
       if (found) return found;
     }
@@ -206,7 +220,7 @@ function findProduct(data: unknown): Record<string, unknown> | null {
   return null;
 }
 
-function extractPrice($: cheerio.CheerioAPI): ParsedPrice | null {
+function extractPrice($: CheerioAPI): ParsedPrice | null {
   const prices: ParsedPrice[] = [];
 
   for (const selector of priceSelectors) {
@@ -226,7 +240,7 @@ function extractPrice($: cheerio.CheerioAPI): ParsedPrice | null {
   return findMostLikelyPrice(prices);
 }
 
-function extractName($: cheerio.CheerioAPI): string | null {
+function extractName($: CheerioAPI): string | null {
   for (const selector of nameSelectors) {
     const element = $(selector).first();
     if (element.length) {
@@ -239,7 +253,7 @@ function extractName($: cheerio.CheerioAPI): string | null {
   return null;
 }
 
-function extractImage($: cheerio.CheerioAPI, baseUrl: string): string | null {
+function extractImage($: CheerioAPI, baseUrl: string): string | null {
   for (const selector of imageSelectors) {
     const element = $(selector).first();
     if (element.length) {
@@ -252,7 +266,7 @@ function extractImage($: cheerio.CheerioAPI, baseUrl: string): string | null {
         // Handle relative URLs
         try {
           return new URL(src, baseUrl).href;
-        } catch {
+        } catch (_e) {
           return src;
         }
       }
