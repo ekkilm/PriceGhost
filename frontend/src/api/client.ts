@@ -172,6 +172,13 @@ export interface SystemSettings {
 export const adminApi = {
   getUsers: () => api.get<UserProfile[]>('/admin/users'),
 
+  createUser: (email: string, password: string, isAdmin: boolean) =>
+    api.post<{ message: string; user: UserProfile }>('/admin/users', {
+      email,
+      password,
+      is_admin: isAdmin,
+    }),
+
   deleteUser: (id: number) => api.delete(`/admin/users/${id}`),
 
   setUserAdmin: (id: number, isAdmin: boolean) =>

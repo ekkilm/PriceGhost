@@ -40,6 +40,11 @@ export default function Settings() {
   const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
   const [isLoadingAdmin, setIsLoadingAdmin] = useState(false);
   const [isSavingAdmin, setIsSavingAdmin] = useState(false);
+  const [showAddUser, setShowAddUser] = useState(false);
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserRole, setNewUserRole] = useState<'user' | 'admin'>('user');
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
 
   useEffect(() => {
     fetchInitialData();
@@ -210,6 +215,35 @@ export default function Settings() {
     }
   };
 
+  const handleCreateUser = async () => {
+    clearMessages();
+    if (!newUserEmail || !newUserPassword) {
+      setError('Email and password are required');
+      return;
+    }
+    if (newUserPassword.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+    setIsCreatingUser(true);
+    try {
+      await adminApi.createUser(newUserEmail, newUserPassword, newUserRole === 'admin');
+      // Refresh users list
+      const usersRes = await adminApi.getUsers();
+      setUsers(usersRes.data);
+      setNewUserEmail('');
+      setNewUserPassword('');
+      setNewUserRole('user');
+      setShowAddUser(false);
+      setSuccess('User created successfully');
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } } };
+      setError(error.response?.data?.error || 'Failed to create user');
+    } finally {
+      setIsCreatingUser(false);
+    }
+  };
+
   const handleDeleteUser = async (userId: number) => {
     if (!confirm('Are you sure you want to delete this user? All their data will be lost.')) {
       return;
@@ -224,14 +258,15 @@ export default function Settings() {
     }
   };
 
-  const handleToggleAdmin = async (userId: number, currentStatus: boolean) => {
+  const handleRoleChange = async (userId: number, newRole: 'user' | 'admin') => {
     clearMessages();
+    const isAdmin = newRole === 'admin';
     try {
-      await adminApi.setUserAdmin(userId, !currentStatus);
-      setUsers(users.map(u => u.id === userId ? { ...u, is_admin: !currentStatus } : u));
-      setSuccess(`Admin status ${!currentStatus ? 'granted' : 'revoked'}`);
+      await adminApi.setUserAdmin(userId, isAdmin);
+      setUsers(users.map(u => u.id === userId ? { ...u, is_admin: isAdmin } : u));
+      setSuccess(`User role updated to ${newRole}`);
     } catch {
-      setError('Failed to update admin status');
+      setError('Failed to update user role');
     }
   };
 
@@ -872,6 +907,82 @@ export default function Settings() {
                   Manage user accounts and permissions.
                 </p>
 
+                {!showAddUser ? (
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => setShowAddUser(true)}
+                    style={{ marginBottom: '1rem' }}
+                  >
+                    + Add User
+                  </button>
+                ) : (
+                  <div className="add-user-form" style={{
+                    background: 'var(--background)',
+                    padding: '1rem',
+                    borderRadius: '0.5rem',
+                    marginBottom: '1rem'
+                  }}>
+                    <h3 style={{ marginBottom: '1rem', fontSize: '1rem', fontWeight: 600 }}>Add New User</h3>
+                    <div className="settings-form-group">
+                      <label>Email</label>
+                      <input
+                        type="email"
+                        value={newUserEmail}
+                        onChange={(e) => setNewUserEmail(e.target.value)}
+                        placeholder="user@example.com"
+                      />
+                    </div>
+                    <div className="settings-form-group">
+                      <label>Password</label>
+                      <input
+                        type="password"
+                        value={newUserPassword}
+                        onChange={(e) => setNewUserPassword(e.target.value)}
+                        placeholder="Minimum 8 characters"
+                      />
+                    </div>
+                    <div className="settings-form-group">
+                      <label>Role</label>
+                      <select
+                        value={newUserRole}
+                        onChange={(e) => setNewUserRole(e.target.value as 'user' | 'admin')}
+                        style={{
+                          width: '100%',
+                          padding: '0.625rem 0.75rem',
+                          border: '1px solid var(--border)',
+                          borderRadius: '0.375rem',
+                          background: 'var(--surface)',
+                          color: 'var(--text)',
+                          fontSize: '0.875rem'
+                        }}
+                      >
+                        <option value="user">User</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </div>
+                    <div className="settings-form-actions">
+                      <button
+                        className="btn btn-primary"
+                        onClick={handleCreateUser}
+                        disabled={isCreatingUser}
+                      >
+                        {isCreatingUser ? 'Creating...' : 'Create User'}
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => {
+                          setShowAddUser(false);
+                          setNewUserEmail('');
+                          setNewUserPassword('');
+                          setNewUserRole('user');
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {isLoadingAdmin ? (
                   <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
                     <span className="spinner" />
@@ -893,30 +1004,35 @@ export default function Settings() {
                           <td className="user-email">{user.email}</td>
                           <td>{user.name || '-'}</td>
                           <td>
-                            {user.is_admin && <span className="user-badge admin">Admin</span>}
+                            {user.id === profile?.id ? (
+                              <span className="user-badge admin">Admin (You)</span>
+                            ) : (
+                              <select
+                                value={user.is_admin ? 'admin' : 'user'}
+                                onChange={(e) => handleRoleChange(user.id, e.target.value as 'user' | 'admin')}
+                                style={{
+                                  padding: '0.25rem 0.5rem',
+                                  border: '1px solid var(--border)',
+                                  borderRadius: '0.25rem',
+                                  background: 'var(--surface)',
+                                  color: 'var(--text)',
+                                  fontSize: '0.75rem'
+                                }}
+                              >
+                                <option value="user">User</option>
+                                <option value="admin">Admin</option>
+                              </select>
+                            )}
                           </td>
                           <td>{new Date(user.created_at).toLocaleDateString()}</td>
                           <td className="actions">
                             {user.id !== profile?.id && (
-                              <>
-                                <button
-                                  className="btn btn-secondary btn-sm"
-                                  onClick={() => handleToggleAdmin(user.id, user.is_admin)}
-                                >
-                                  {user.is_admin ? 'Remove Admin' : 'Make Admin'}
-                                </button>
-                                <button
-                                  className="btn btn-danger btn-sm"
-                                  onClick={() => handleDeleteUser(user.id)}
-                                >
-                                  Delete
-                                </button>
-                              </>
-                            )}
-                            {user.id === profile?.id && (
-                              <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                                (You)
-                              </span>
+                              <button
+                                className="btn btn-danger btn-sm"
+                                onClick={() => handleDeleteUser(user.id)}
+                              >
+                                Delete
+                              </button>
                             )}
                           </td>
                         </tr>
