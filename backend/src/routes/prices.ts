@@ -78,8 +78,8 @@ router.post('/:productId/refresh', async (req: AuthRequest, res: Response) => {
       );
     }
 
-    // Update last_checked timestamp
-    await productQueries.updateLastChecked(productId);
+    // Update last_checked timestamp and schedule next check
+    await productQueries.updateLastChecked(productId, product.refresh_interval);
 
     res.json({
       message: scrapedData.stockStatus === 'out_of_stock'

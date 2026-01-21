@@ -69,8 +69,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       );
     }
 
-    // Update last_checked timestamp
-    await productQueries.updateLastChecked(product.id);
+    // Update last_checked timestamp and schedule next check
+    await productQueries.updateLastChecked(product.id, product.refresh_interval);
 
     // Fetch the product with the price
     const productWithPrice = await productQueries.findById(product.id, userId);
