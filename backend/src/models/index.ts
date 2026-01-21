@@ -35,6 +35,8 @@ export const userQueries = {
 };
 
 // Product types and queries
+export type StockStatus = 'in_stock' | 'out_of_stock' | 'unknown';
+
 export interface Product {
   id: number;
   user_id: number;
@@ -43,6 +45,7 @@ export interface Product {
   image_url: string | null;
   refresh_interval: number;
   last_checked: Date | null;
+  stock_status: StockStatus;
   created_at: Date;
 }
 
@@ -159,13 +162,14 @@ export const productQueries = {
     url: string,
     name: string | null,
     imageUrl: string | null,
-    refreshInterval: number = 3600
+    refreshInterval: number = 3600,
+    stockStatus: StockStatus = 'unknown'
   ): Promise<Product> => {
     const result = await pool.query(
-      `INSERT INTO products (user_id, url, name, image_url, refresh_interval)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO products (user_id, url, name, image_url, refresh_interval, stock_status)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [userId, url, name, imageUrl, refreshInterval]
+      [userId, url, name, imageUrl, refreshInterval, stockStatus]
     );
     return result.rows[0];
   },
@@ -212,6 +216,13 @@ export const productQueries = {
     await pool.query(
       'UPDATE products SET last_checked = CURRENT_TIMESTAMP WHERE id = $1',
       [id]
+    );
+  },
+
+  updateStockStatus: async (id: number, stockStatus: StockStatus): Promise<void> => {
+    await pool.query(
+      'UPDATE products SET stock_status = $1 WHERE id = $2',
+      [stockStatus, id]
     );
   },
 

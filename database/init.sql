@@ -17,9 +17,21 @@ CREATE TABLE IF NOT EXISTS products (
   image_url TEXT,
   refresh_interval INTEGER DEFAULT 3600,
   last_checked TIMESTAMP,
+  stock_status VARCHAR(20) DEFAULT 'unknown',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(user_id, url)
 );
+
+-- Migration: Add stock_status column if it doesn't exist (for existing databases)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'products' AND column_name = 'stock_status'
+  ) THEN
+    ALTER TABLE products ADD COLUMN stock_status VARCHAR(20) DEFAULT 'unknown';
+  END IF;
+END $$;
 
 -- Price history table
 CREATE TABLE IF NOT EXISTS price_history (

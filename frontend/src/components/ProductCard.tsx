@@ -40,8 +40,10 @@ export default function ProductCard({ product, onDelete }: ProductCardProps) {
       : ''
     : '';
 
+  const isOutOfStock = product.stock_status === 'out_of_stock';
+
   return (
-    <div className="product-list-item">
+    <div className={`product-list-item ${isOutOfStock ? 'out-of-stock' : ''}`}>
       <style>{`
         .product-list-item {
           background: var(--surface);
@@ -138,6 +140,36 @@ export default function ProductCard({ product, onDelete }: ProductCardProps) {
           color: #10b981;
         }
 
+        .product-stock-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.25rem;
+          padding: 0.25rem 0.5rem;
+          border-radius: 0.25rem;
+          font-size: 0.6875rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.025em;
+        }
+
+        .product-stock-badge.out-of-stock {
+          background: #fef2f2;
+          color: #dc2626;
+        }
+
+        [data-theme="dark"] .product-stock-badge.out-of-stock {
+          background: rgba(220, 38, 38, 0.2);
+          color: #f87171;
+        }
+
+        .product-list-item.out-of-stock {
+          opacity: 0.7;
+        }
+
+        .product-list-item.out-of-stock .product-thumbnail {
+          filter: grayscale(50%);
+        }
+
         .product-sparkline {
           flex-shrink: 0;
         }
@@ -209,13 +241,21 @@ export default function ProductCard({ product, onDelete }: ProductCardProps) {
       </div>
 
       <div className="product-price-section">
-        <span className="product-current-price">
-          {formatPrice(product.current_price, product.currency)}
-        </span>
-        {product.price_change_7d !== null && product.price_change_7d !== undefined && (
-          <span className={`product-price-change ${priceChangeClass}`}>
-            {formatPriceChange(product.price_change_7d)} (7d)
+        {isOutOfStock ? (
+          <span className="product-stock-badge out-of-stock">
+            Out of Stock
           </span>
+        ) : (
+          <>
+            <span className="product-current-price">
+              {formatPrice(product.current_price, product.currency)}
+            </span>
+            {product.price_change_7d !== null && product.price_change_7d !== undefined && (
+              <span className={`product-price-change ${priceChangeClass}`}>
+                {formatPriceChange(product.price_change_7d)} (7d)
+              </span>
+            )}
+          </>
         )}
       </div>
 

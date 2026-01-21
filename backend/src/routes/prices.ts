@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { productQueries, priceHistoryQueries } from '../models';
-import { scrapePrice } from '../services/scraper';
+import { scrapeProduct } from '../services/scraper';
 
 const router = Router();
 
@@ -62,27 +62,31 @@ router.post('/:productId/refresh', async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    // Scrape new price
-    const priceData = await scrapePrice(product.url);
+    // Scrape product data including price and stock status
+    const scrapedData = await scrapeProduct(product.url);
 
-    if (!priceData) {
-      res.status(400).json({ error: 'Could not extract price from URL' });
-      return;
+    // Update stock status
+    await productQueries.updateStockStatus(productId, scrapedData.stockStatus);
+
+    // Record new price if available
+    let newPrice = null;
+    if (scrapedData.price) {
+      newPrice = await priceHistoryQueries.create(
+        productId,
+        scrapedData.price.price,
+        scrapedData.price.currency
+      );
     }
-
-    // Record new price
-    const newPrice = await priceHistoryQueries.create(
-      productId,
-      priceData.price,
-      priceData.currency
-    );
 
     // Update last_checked timestamp
     await productQueries.updateLastChecked(productId);
 
     res.json({
-      message: 'Price refreshed successfully',
+      message: scrapedData.stockStatus === 'out_of_stock'
+        ? 'Product is currently out of stock'
+        : 'Price refreshed successfully',
       price: newPrice,
+      stockStatus: scrapedData.stockStatus,
     });
   } catch (error) {
     console.error('Error refreshing price:', error);

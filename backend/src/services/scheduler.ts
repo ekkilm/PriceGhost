@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { productQueries, priceHistoryQueries } from '../models';
-import { scrapePrice } from './scraper';
+import { scrapeProduct } from './scraper';
 
 let isRunning = false;
 
@@ -22,25 +22,35 @@ async function checkPrices(): Promise<void> {
       try {
         console.log(`Checking price for product ${product.id}: ${product.url}`);
 
-        const priceData = await scrapePrice(product.url);
+        const scrapedData = await scrapeProduct(product.url);
 
-        if (priceData) {
+        // Update stock status
+        if (scrapedData.stockStatus !== product.stock_status) {
+          await productQueries.updateStockStatus(product.id, scrapedData.stockStatus);
+          console.log(
+            `Stock status changed for product ${product.id}: ${product.stock_status} -> ${scrapedData.stockStatus}`
+          );
+        }
+
+        if (scrapedData.price) {
           // Get the latest recorded price to compare
           const latestPrice = await priceHistoryQueries.getLatest(product.id);
 
           // Only record if price has changed or it's the first entry
-          if (!latestPrice || latestPrice.price !== priceData.price) {
+          if (!latestPrice || latestPrice.price !== scrapedData.price.price) {
             await priceHistoryQueries.create(
               product.id,
-              priceData.price,
-              priceData.currency
+              scrapedData.price.price,
+              scrapedData.price.currency
             );
             console.log(
-              `Recorded new price for product ${product.id}: ${priceData.currency} ${priceData.price}`
+              `Recorded new price for product ${product.id}: ${scrapedData.price.currency} ${scrapedData.price.price}`
             );
           } else {
             console.log(`Price unchanged for product ${product.id}`);
           }
+        } else if (scrapedData.stockStatus === 'out_of_stock') {
+          console.log(`Product ${product.id} is out of stock, no price available`);
         } else {
           console.warn(`Could not extract price for product ${product.id}`);
         }

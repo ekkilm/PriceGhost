@@ -41,6 +41,8 @@ export const authApi = {
 };
 
 // Products API
+export type StockStatus = 'in_stock' | 'out_of_stock' | 'unknown';
+
 export interface SparklinePoint {
   price: number;
   recorded_at: string;
@@ -54,6 +56,7 @@ export interface Product {
   image_url: string | null;
   refresh_interval: number;
   last_checked: string | null;
+  stock_status: StockStatus;
   created_at: string;
   current_price: number | null;
   currency: string | null;

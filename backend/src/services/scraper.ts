@@ -6,17 +6,20 @@ import {
   findMostLikelyPrice,
 } from '../utils/priceParser';
 
+export type StockStatus = 'in_stock' | 'out_of_stock' | 'unknown';
+
 export interface ScrapedProduct {
   name: string | null;
   price: ParsedPrice | null;
   imageUrl: string | null;
   url: string;
+  stockStatus: StockStatus;
 }
 
 // Site-specific scraper configurations
 interface SiteScraper {
   match: (url: string) => boolean;
-  scrape: ($: CheerioAPI, url: string) => Partial<ScrapedProduct>;
+  scrape: ($: CheerioAPI, url: string) => Partial<Omit<ScrapedProduct, 'url'>>;
 }
 
 const siteScrapers: SiteScraper[] = [
@@ -133,7 +136,38 @@ const siteScrapers: SiteScraper[] = [
                        $('img[data-a-dynamic-image]').attr('src') ||
                        null;
 
-      return { name, price, imageUrl };
+      // Stock status detection
+      let stockStatus: StockStatus = 'unknown';
+      const availabilityText = $('#availability').text().toLowerCase();
+      const outOfStockDiv = $('#outOfStock').length > 0;
+      const unavailableText = $('body').text().toLowerCase();
+
+      // Check for out of stock indicators
+      if (
+        outOfStockDiv ||
+        availabilityText.includes('currently unavailable') ||
+        availabilityText.includes('out of stock') ||
+        availabilityText.includes('not available') ||
+        $('#add-to-cart-button').length === 0 && $('#buy-now-button').length === 0
+      ) {
+        // Verify it's truly out of stock by checking for unavailable messaging
+        if (
+          unavailableText.includes('currently unavailable') ||
+          unavailableText.includes("we don't know when or if this item will be back in stock") ||
+          outOfStockDiv ||
+          availabilityText.includes('out of stock')
+        ) {
+          stockStatus = 'out_of_stock';
+        }
+      } else if (
+        availabilityText.includes('in stock') ||
+        availabilityText.includes('available') ||
+        $('#add-to-cart-button').length > 0
+      ) {
+        stockStatus = 'in_stock';
+      }
+
+      return { name, price, imageUrl, stockStatus };
     },
   },
 
@@ -407,6 +441,7 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
     price: null,
     imageUrl: null,
     url,
+    stockStatus: 'unknown',
   };
 
   try {
@@ -442,6 +477,7 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
       if (siteResult.name) result.name = siteResult.name;
       if (siteResult.price) result.price = siteResult.price;
       if (siteResult.imageUrl) result.imageUrl = siteResult.imageUrl;
+      if (siteResult.stockStatus) result.stockStatus = siteResult.stockStatus;
     }
 
     // Try JSON-LD structured data
@@ -465,6 +501,11 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
 
     if (!result.imageUrl) {
       result.imageUrl = extractGenericImage($, url);
+    }
+
+    // Generic stock status detection if not already set
+    if (result.stockStatus === 'unknown') {
+      result.stockStatus = extractGenericStockStatus($);
     }
 
     // Try Open Graph meta tags as last resort
@@ -633,6 +674,68 @@ function extractGenericImage($: CheerioAPI, baseUrl: string): string | null {
     }
   }
   return null;
+}
+
+function extractGenericStockStatus($: CheerioAPI): StockStatus {
+  const bodyText = $('body').text().toLowerCase();
+
+  // Common out-of-stock indicators
+  const outOfStockPatterns = [
+    'out of stock',
+    'currently unavailable',
+    'not available',
+    'sold out',
+    'no longer available',
+    'temporarily out of stock',
+    'unavailable',
+    'back in stock soon',
+    'notify me when available',
+    'out-of-stock',
+  ];
+
+  // Common in-stock indicators
+  const inStockPatterns = [
+    'in stock',
+    'add to cart',
+    'add to basket',
+    'buy now',
+    'available',
+    'ships from',
+    'ready to ship',
+  ];
+
+  // Check for out-of-stock patterns
+  for (const pattern of outOfStockPatterns) {
+    if (bodyText.includes(pattern)) {
+      // Make sure it's not negated (e.g., "not out of stock")
+      const index = bodyText.indexOf(pattern);
+      const before = bodyText.slice(Math.max(0, index - 10), index);
+      if (!before.includes('not ') && !before.includes("isn't ") && !before.includes("won't be ")) {
+        return 'out_of_stock';
+      }
+    }
+  }
+
+  // Check for in-stock indicators
+  for (const pattern of inStockPatterns) {
+    if (bodyText.includes(pattern)) {
+      return 'in_stock';
+    }
+  }
+
+  // Check for schema.org availability
+  const availability = $('[itemprop="availability"]').attr('content') ||
+                       $('[itemprop="availability"]').attr('href') || '';
+  if (availability.toLowerCase().includes('outofstock') ||
+      availability.toLowerCase().includes('discontinued')) {
+    return 'out_of_stock';
+  }
+  if (availability.toLowerCase().includes('instock') ||
+      availability.toLowerCase().includes('available')) {
+    return 'in_stock';
+  }
+
+  return 'unknown';
 }
 
 export async function scrapePrice(url: string): Promise<ParsedPrice | null> {

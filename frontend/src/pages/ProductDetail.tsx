@@ -224,6 +224,37 @@ export default function ProductDetail() {
           color: #16a34a;
         }
 
+        .product-detail-stock-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.375rem;
+          padding: 0.5rem 0.75rem;
+          border-radius: 0.375rem;
+          font-size: 0.875rem;
+          font-weight: 600;
+          margin-bottom: 1rem;
+        }
+
+        .product-detail-stock-badge.out-of-stock {
+          background: #fef2f2;
+          color: #dc2626;
+        }
+
+        [data-theme="dark"] .product-detail-stock-badge.out-of-stock {
+          background: rgba(220, 38, 38, 0.2);
+          color: #f87171;
+        }
+
+        .product-detail-stock-badge.in-stock {
+          background: #f0fdf4;
+          color: #16a34a;
+        }
+
+        [data-theme="dark"] .product-detail-stock-badge.in-stock {
+          background: rgba(22, 163, 74, 0.2);
+          color: #4ade80;
+        }
+
         .product-detail-meta {
           margin-top: 1.5rem;
           padding-top: 1.5rem;
@@ -288,8 +319,20 @@ export default function ProductDetail() {
               </a>
             </p>
 
+            {product.stock_status === 'out_of_stock' ? (
+              <div className="product-detail-stock-badge out-of-stock">
+                <span>⚠</span> Currently Unavailable
+              </div>
+            ) : product.stock_status === 'in_stock' ? (
+              <div className="product-detail-stock-badge in-stock">
+                <span>✓</span> In Stock
+              </div>
+            ) : null}
+
             <div className="product-detail-price">
-              {formatPrice(product.current_price, product.currency)}
+              {product.stock_status === 'out_of_stock'
+                ? 'Price unavailable'
+                : formatPrice(product.current_price, product.currency)}
             </div>
 
             {priceChange !== null && priceChange !== 0 && (

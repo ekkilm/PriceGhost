@@ -42,28 +42,32 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     // Scrape product info
     const scrapedData = await scrapeProduct(url);
 
-    if (!scrapedData.price) {
+    // Allow adding out-of-stock products, but require a price for in-stock ones
+    if (!scrapedData.price && scrapedData.stockStatus !== 'out_of_stock') {
       res.status(400).json({
         error: 'Could not extract price from the provided URL',
       });
       return;
     }
 
-    // Create product
+    // Create product with stock status
     const product = await productQueries.create(
       userId,
       url,
       scrapedData.name,
       scrapedData.imageUrl,
-      refresh_interval || 3600
+      refresh_interval || 3600,
+      scrapedData.stockStatus
     );
 
-    // Record initial price
-    await priceHistoryQueries.create(
-      product.id,
-      scrapedData.price.price,
-      scrapedData.price.currency
-    );
+    // Record initial price if available
+    if (scrapedData.price) {
+      await priceHistoryQueries.create(
+        product.id,
+        scrapedData.price.price,
+        scrapedData.price.currency
+      );
+    }
 
     // Update last_checked timestamp
     await productQueries.updateLastChecked(product.id);
