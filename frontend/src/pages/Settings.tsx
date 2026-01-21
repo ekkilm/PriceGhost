@@ -46,7 +46,8 @@ export default function Settings() {
       setSettings(response.data);
       setTelegramBotToken('');
       setSuccess('Telegram settings saved successfully');
-    } catch {
+    } catch (err) {
+      console.error('Telegram save error:', err);
       setError('Failed to save Telegram settings');
     } finally {
       setIsSaving(false);
@@ -64,7 +65,8 @@ export default function Settings() {
       setSettings(response.data);
       setDiscordWebhookUrl('');
       setSuccess('Discord settings saved successfully');
-    } catch {
+    } catch (err) {
+      console.error('Discord save error:', err);
       setError('Failed to save Discord settings');
     } finally {
       setIsSaving(false);
