@@ -94,10 +94,16 @@ export interface Product {
   image_url: string | null;
   refresh_interval: number;
   last_checked: Date | null;
+  next_check_at: Date | null;
   stock_status: StockStatus;
   price_drop_threshold: number | null;
   notify_back_in_stock: boolean;
   created_at: Date;
+}
+
+// Generate jitter between -5 and +5 minutes (in seconds)
+function getJitterSeconds(): number {
+  return Math.floor(Math.random() * 600) - 300;
 }
 
 export interface ProductWithLatestPrice extends Product {
@@ -216,11 +222,14 @@ export const productQueries = {
     refreshInterval: number = 3600,
     stockStatus: StockStatus = 'unknown'
   ): Promise<Product> => {
+    // Set initial next_check_at to a random time within the refresh interval
+    // This spreads out new products so they don't all check at once
+    const randomDelaySeconds = Math.floor(Math.random() * refreshInterval);
     const result = await pool.query(
-      `INSERT INTO products (user_id, url, name, image_url, refresh_interval, stock_status)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO products (user_id, url, name, image_url, refresh_interval, stock_status, next_check_at)
+       VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP + ($7 || ' seconds')::interval)
        RETURNING *`,
-      [userId, url, name, imageUrl, refreshInterval, stockStatus]
+      [userId, url, name, imageUrl, refreshInterval, stockStatus, randomDelaySeconds]
     );
     return result.rows[0];
   },
@@ -276,10 +285,16 @@ export const productQueries = {
     return (result.rowCount ?? 0) > 0;
   },
 
-  updateLastChecked: async (id: number): Promise<void> => {
+  updateLastChecked: async (id: number, refreshInterval: number): Promise<void> => {
+    // Add jitter of ±5 minutes to spread out checks over time
+    const jitterSeconds = getJitterSeconds();
+    const nextCheckSeconds = refreshInterval + jitterSeconds;
     await pool.query(
-      'UPDATE products SET last_checked = CURRENT_TIMESTAMP WHERE id = $1',
-      [id]
+      `UPDATE products
+       SET last_checked = CURRENT_TIMESTAMP,
+           next_check_at = CURRENT_TIMESTAMP + ($2 || ' seconds')::interval
+       WHERE id = $1`,
+      [id, nextCheckSeconds]
     );
   },
 
@@ -293,8 +308,8 @@ export const productQueries = {
   findDueForRefresh: async (): Promise<Product[]> => {
     const result = await pool.query(
       `SELECT * FROM products
-       WHERE last_checked IS NULL
-       OR last_checked + (refresh_interval || ' seconds')::interval < CURRENT_TIMESTAMP`
+       WHERE next_check_at IS NULL
+       OR next_check_at < CURRENT_TIMESTAMP`
     );
     return result.rows;
   },

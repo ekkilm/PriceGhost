@@ -108,11 +108,12 @@ async function checkPrices(): Promise<void> {
           console.warn(`Could not extract price for product ${product.id}`);
         }
 
-        // Update last_checked even if price extraction failed
-        await productQueries.updateLastChecked(product.id);
+        // Update last_checked and schedule next check with jitter
+        await productQueries.updateLastChecked(product.id, product.refresh_interval);
 
-        // Add a small delay between requests to avoid rate limiting
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        // Add a randomized delay between requests (2-5 seconds) to avoid rate limiting
+        const delay = 2000 + Math.floor(Math.random() * 3000);
+        await new Promise((resolve) => setTimeout(resolve, delay));
       } catch (error) {
         console.error(`Error checking product ${product.id}:`, error);
         // Continue with next product even if one fails
