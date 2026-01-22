@@ -729,12 +729,15 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
     }
 
     // Try JSON-LD structured data
-    if (!result.price || !result.name) {
+    if (!result.price || !result.name || result.stockStatus === 'unknown') {
       const jsonLdData = extractJsonLd($);
       if (jsonLdData) {
         if (!result.name && jsonLdData.name) result.name = jsonLdData.name;
         if (!result.price && jsonLdData.price) result.price = jsonLdData.price;
         if (!result.imageUrl && jsonLdData.image) result.imageUrl = jsonLdData.image;
+        if (result.stockStatus === 'unknown' && jsonLdData.stockStatus) {
+          result.stockStatus = jsonLdData.stockStatus;
+        }
       }
     }
 
@@ -789,11 +792,12 @@ interface JsonLdOffer {
   priceCurrency?: string;
   lowPrice?: string | number;
   priceSpecification?: JsonLdPriceSpecification;
+  availability?: string;
 }
 
 function extractJsonLd(
   $: CheerioAPI
-): { name?: string; price?: ParsedPrice; image?: string } | null {
+): { name?: string; price?: ParsedPrice; image?: string; stockStatus?: StockStatus } | null {
   try {
     const scripts = $('script[type="application/ld+json"]');
     for (let i = 0; i < scripts.length; i++) {
@@ -804,7 +808,7 @@ function extractJsonLd(
       const product = findProduct(data);
 
       if (product) {
-        const result: { name?: string; price?: ParsedPrice; image?: string } = {};
+        const result: { name?: string; price?: ParsedPrice; image?: string; stockStatus?: StockStatus } = {};
 
         if (product.name) {
           result.name = product.name;
@@ -827,6 +831,17 @@ function extractJsonLd(
               price: parseFloat(String(priceValue)),
               currency,
             };
+          }
+
+          // Extract stock status from availability
+          if (offer.availability) {
+            const avail = offer.availability.toLowerCase();
+            if (avail.includes('instock') || avail.includes('in_stock')) {
+              result.stockStatus = 'in_stock';
+            } else if (avail.includes('outofstock') || avail.includes('out_of_stock') ||
+                       avail.includes('soldout') || avail.includes('sold_out')) {
+              result.stockStatus = 'out_of_stock';
+            }
           }
         }
 
