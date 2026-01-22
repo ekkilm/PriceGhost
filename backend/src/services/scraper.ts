@@ -1,5 +1,6 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import { load, type CheerioAPI } from 'cheerio';
+import puppeteer from 'puppeteer';
 import {
   parsePrice,
   ParsedPrice,
@@ -7,6 +8,48 @@ import {
 } from '../utils/priceParser';
 
 export type StockStatus = 'in_stock' | 'out_of_stock' | 'unknown';
+
+// Browser-based scraping for sites that block HTTP requests (e.g., Cloudflare)
+async function scrapeWithBrowser(url: string): Promise<string> {
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-accelerated-2d-canvas',
+      '--disable-gpu',
+    ],
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+  });
+
+  try {
+    const page = await browser.newPage();
+
+    // Set a realistic user agent
+    await page.setUserAgent(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+    );
+
+    // Set viewport
+    await page.setViewport({ width: 1920, height: 1080 });
+
+    // Navigate to the page and wait for content to load
+    await page.goto(url, {
+      waitUntil: 'networkidle2',
+      timeout: 30000,
+    });
+
+    // Wait a bit for any dynamic content to render
+    await page.waitForSelector('body', { timeout: 5000 });
+
+    // Get the full HTML content
+    const html = await page.content();
+    return html;
+  } finally {
+    await browser.close();
+  }
+}
 
 export interface ScrapedProduct {
   name: string | null;
@@ -567,7 +610,7 @@ const siteScrapers: SiteScraper[] = [
       // Try to get data from JSON-LD first
       try {
         const scripts = $('script[type="application/ld+json"]');
-        scripts.each((_, script) => {
+        scripts.each((_i, script) => {
           const content = $(script).html();
           if (!content) return;
           try {
@@ -599,11 +642,11 @@ const siteScrapers: SiteScraper[] = [
               }
             }
           } catch (_e) {
-            // Continue to next script
+            // JSON-LD parse error, continue
           }
         });
       } catch (_e) {
-        // JSON-LD parsing failed
+        // JSON-LD extraction error, continue
       }
 
       // Fallback to HTML selectors
@@ -712,30 +755,49 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
   };
 
   try {
-    const response = await axios.get<string>(url, {
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-        Accept:
-          'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Cache-Control': 'no-cache',
-        Pragma: 'no-cache',
-        'Sec-Ch-Ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"Windows"',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Upgrade-Insecure-Requests': '1',
-      },
-      timeout: 20000,
-      maxRedirects: 5,
-    });
+    let html: string;
+    let usedBrowser = false;
 
-    const $ = load(response.data);
+    try {
+      const response = await axios.get<string>(url, {
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+          Accept:
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+          'Sec-Ch-Ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+          'Sec-Ch-Ua-Mobile': '?0',
+          'Sec-Ch-Ua-Platform': '"Windows"',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none',
+          'Sec-Fetch-User': '?1',
+          'Upgrade-Insecure-Requests': '1',
+        },
+        timeout: 20000,
+        maxRedirects: 5,
+      });
+      html = response.data;
+    } catch (axiosError) {
+      // If we get a 403 (Forbidden), try using a headless browser
+      if (axiosError instanceof AxiosError && axiosError.response?.status === 403) {
+        console.log(`HTTP request blocked (403) for ${url}, falling back to browser scraping...`);
+        html = await scrapeWithBrowser(url);
+        usedBrowser = true;
+      } else {
+        throw axiosError;
+      }
+    }
+
+    const $ = load(html);
+
+    if (usedBrowser) {
+      console.log(`Successfully scraped ${url} using headless browser`);
+    }
 
     // Try site-specific scraper first
     const siteScraper = siteScrapers.find((s) => s.match(url));
