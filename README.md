@@ -1,32 +1,41 @@
-# PriceGhost 👻
+# PriceGhost
 
-A self-hosted price tracking application that monitors product prices across major retailers. Get notified when prices drop or items come back in stock.
+A self-hosted price tracking application that monitors product prices from any website. Get notified when prices drop, hit your target price, or items come back in stock.
 
 ## Features
 
 ### Price Tracking
-- **Universal scraping** - Works with Amazon, Newegg, Walmart, Best Buy, Target, eBay, Home Depot, Costco, AliExpress, and any site with standard price markup
-- **Smart price detection** - Uses multiple strategies: site-specific selectors, JSON-LD structured data, and intelligent heuristics
+- **Universal scraping** - Works with virtually any e-commerce website
+- **Smart price detection** - Uses multiple strategies: JSON-LD structured data, meta tags, CSS selectors, and pattern matching
+- **AI-powered fallback** - Optional Claude (Anthropic) or GPT (OpenAI) integration for difficult-to-scrape sites
+- **Headless browser support** - Puppeteer with stealth mode for JavaScript-rendered pages
 - **Price history charts** - Interactive visualization with customizable date ranges (7d, 30d, 90d, all time)
 - **7-day sparklines** - Quick price trend overview on the dashboard
-- **Configurable check intervals** - From 30 minutes to 24 hours per product
+- **Configurable check intervals** - From 5 minutes to 24 hours per product
 
 ### Notifications
-- **Telegram alerts** - Get notified via Telegram bot when prices drop
-- **Discord webhooks** - Send alerts to any Discord channel
-- **Per-product thresholds** - Set custom price drop amounts (e.g., "notify me when it drops $10+")
+- **Price drop alerts** - Set a threshold (e.g., "notify when it drops $10+")
+- **Target price alerts** - Set your ideal price and get notified when reached
 - **Back-in-stock alerts** - Get notified when out-of-stock items become available
+- **Telegram** - Get alerts via Telegram bot
+- **Discord** - Send alerts to any Discord channel via webhooks
 
 ### Stock Tracking
 - **Out-of-stock detection** - Automatically detects when products are unavailable
 - **Visual indicators** - Clear badges showing stock status on dashboard and detail pages
-- **Stock history** - Track when items go in and out of stock
+- **Stock change notifications** - Get notified when items come back in stock
+
+### User Management
+- **Multi-user support** - Each user has their own products and settings
+- **Admin panel** - Manage users, create accounts, toggle admin privileges
+- **Registration control** - Enable/disable public registration
+- **Profile management** - Update display name and change password
 
 ### User Experience
-- **Dark/Light mode** - System-aware theme with manual toggle
+- **Toast notifications** - Visual feedback for all actions
 - **Responsive design** - Works on desktop and mobile
 - **Manual refresh** - Force an immediate price check with one click
-- **Dashboard notifications** - See which products have alerts configured at a glance
+- **Price statistics** - See min, max, and average prices for each product
 
 ## Tech Stack
 
@@ -34,28 +43,12 @@ A self-hosted price tracking application that monitors product prices across maj
 |-------|------------|
 | **Frontend** | React 18, TypeScript, Vite |
 | **Backend** | Node.js, Express, TypeScript |
-| **Database** | PostgreSQL 16 |
-| **Scraping** | Cheerio, Axios |
+| **Database** | PostgreSQL |
+| **Scraping** | Cheerio, Puppeteer (with stealth plugin) |
+| **AI Extraction** | Anthropic Claude, OpenAI GPT (optional) |
 | **Charts** | Recharts |
 | **Auth** | JWT + bcrypt |
 | **Scheduling** | node-cron |
-| **Containerization** | Docker, Docker Compose |
-| **CI/CD** | GitHub Actions |
-
-## Supported Retailers
-
-Optimized scrapers for:
-- Amazon (US, UK, CA, DE, FR, ES, IT, JP, IN, AU)
-- Newegg
-- Walmart
-- Best Buy
-- Target
-- eBay
-- Home Depot
-- Costco
-- AliExpress
-
-Generic scraping works on most other e-commerce sites.
 
 ## Quick Start
 
@@ -69,7 +62,7 @@ cd PriceGhost
 # Start all services
 docker-compose up -d
 
-# Access at http://localhost:8089 (or your configured port)
+# Access at http://localhost:8089
 ```
 
 ### Environment Variables
@@ -93,15 +86,15 @@ VITE_API_URL=/api
 ## Development Setup
 
 ### Prerequisites
-- Node.js 20+
-- PostgreSQL 16+
+- Node.js 18+
+- PostgreSQL 14+
 
 ### Backend
 
 ```bash
 cd backend
 npm install
-cp .env.example .env  # Edit with your database credentials
+npm run db:init  # Initialize database schema
 npm run dev
 ```
 
@@ -113,6 +106,31 @@ npm install
 npm run dev
 ```
 
+## Configuration
+
+### Notification Setup
+
+#### Telegram
+1. Create a bot via [@BotFather](https://t.me/botfather) on Telegram
+2. Get your Chat ID from [@userinfobot](https://t.me/userinfobot)
+3. Enter both in Settings > Notifications
+
+#### Discord
+1. In your Discord server: Server Settings > Integrations > Webhooks
+2. Create a new webhook and copy the URL
+3. Enter the URL in Settings > Notifications
+
+### AI Extraction (Optional)
+
+For improved compatibility with difficult sites:
+
+1. Go to Settings > AI Settings
+2. Enable AI-powered extraction
+3. Choose your provider (Anthropic or OpenAI)
+4. Enter your API key
+
+The AI will automatically be used as a fallback when standard scraping fails to extract a price.
+
 ## API Reference
 
 ### Authentication
@@ -120,6 +138,7 @@ npm run dev
 |--------|----------|-------------|
 | POST | `/api/auth/register` | Create account |
 | POST | `/api/auth/login` | Login, returns JWT |
+| GET | `/api/auth/registration-status` | Check if registration is enabled |
 
 ### Products
 | Method | Endpoint | Description |
@@ -141,8 +160,28 @@ npm run dev
 |--------|----------|-------------|
 | GET | `/api/settings/notifications` | Get notification config |
 | PUT | `/api/settings/notifications` | Update Telegram/Discord settings |
-| POST | `/api/settings/notifications/test/telegram` | Send test notification |
-| POST | `/api/settings/notifications/test/discord` | Send test notification |
+| POST | `/api/settings/notifications/test/telegram` | Send test Telegram notification |
+| POST | `/api/settings/notifications/test/discord` | Send test Discord notification |
+| GET | `/api/settings/ai` | Get AI extraction settings |
+| PUT | `/api/settings/ai` | Update AI settings |
+| POST | `/api/settings/ai/test` | Test AI extraction on a URL |
+
+### Profile
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/profile` | Get user profile |
+| PUT | `/api/profile` | Update profile |
+| PUT | `/api/profile/password` | Change password |
+
+### Admin
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/admin/users` | List all users |
+| POST | `/api/admin/users` | Create user |
+| DELETE | `/api/admin/users/:id` | Delete user |
+| PUT | `/api/admin/users/:id/admin` | Toggle admin status |
+| GET | `/api/admin/settings` | Get system settings |
+| PUT | `/api/admin/settings` | Update system settings |
 
 ## Project Structure
 
@@ -154,49 +193,30 @@ PriceGhost/
 │       ├── middleware/     # JWT authentication
 │       ├── models/         # Database queries
 │       ├── routes/         # API endpoints
-│       ├── services/       # Scraper, scheduler, notifications
-│       └── utils/          # Price parsing
+│       ├── services/       # Scraper, AI extractor, scheduler, notifications
+│       └── utils/          # Price parsing utilities
 ├── frontend/
 │   └── src/
 │       ├── api/            # Axios client
 │       ├── components/     # Reusable components
-│       ├── context/        # Auth context
+│       ├── context/        # Auth & Toast contexts
 │       ├── hooks/          # Custom hooks
 │       └── pages/          # Page components
-├── database/
-│   └── init.sql            # Schema + migrations
-├── docker-compose.yml
-└── .github/workflows/      # CI/CD
+└── docker-compose.yml
 ```
 
 ## Rate Limiting & Best Practices
 
 To avoid getting blocked by retailers:
 
-- **Staggered checking** - Products are checked at randomized intervals with ±5 minute jitter
+- **Staggered checking** - Products are checked at randomized intervals with jitter
 - **Request delays** - 2-5 second random delay between checking different products
-- **Reasonable intervals** - Default 1 hour; use longer intervals (4-6 hours) if tracking many products
-- **User-Agent rotation** - Requests use standard browser headers
-
-## Setting Up Notifications
-
-### Telegram
-1. Create a bot via [@BotFather](https://t.me/botfather) on Telegram
-2. Get your Chat ID from [@userinfobot](https://t.me/userinfobot)
-3. Enter both in Settings → Telegram Notifications
-
-### Discord
-1. In your Discord server: Server Settings → Integrations → Webhooks
-2. Create a new webhook and copy the URL
-3. Enter the URL in Settings → Discord Notifications
-
----
+- **Reasonable intervals** - Default 1 hour; use longer intervals if tracking many products
+- **Browser headers** - Requests use standard browser User-Agent strings
 
 ## About This Project
 
-This project was built collaboratively with [Claude](https://claude.ai) (Anthropic's AI assistant) using [Claude Code](https://claude.ai/claude-code). Every feature, from the initial architecture to the scraping heuristics to the notification system, was developed through iterative conversation and code generation.
-
-**This isn't typical "AI slop."** Each component was thoughtfully designed, tested against real product pages, and refined based on actual usage. The codebase follows consistent patterns, handles edge cases properly, and includes real-world considerations like rate limiting and anti-bot detection avoidance.
+This project was built collaboratively with [Claude](https://claude.ai) (Anthropic's AI assistant) using [Claude Code](https://claude.ai/claude-code). Every feature was developed through iterative conversation and code generation.
 
 Built with Claude Opus 4.5.
 
