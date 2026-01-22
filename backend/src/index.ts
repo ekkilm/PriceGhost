@@ -31,6 +31,12 @@ async function runMigrations() {
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'openai_api_key') THEN
           ALTER TABLE users ADD COLUMN openai_api_key TEXT;
         END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'pushover_user_key') THEN
+          ALTER TABLE users ADD COLUMN pushover_user_key TEXT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'pushover_app_token') THEN
+          ALTER TABLE users ADD COLUMN pushover_app_token TEXT;
+        END IF;
       END $$;
     `);
     console.log('Database migrations completed');

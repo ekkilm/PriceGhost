@@ -18,11 +18,12 @@ router.get('/notifications', async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    // Don't expose full bot token, just indicate if it's set
+    // Don't expose full tokens, just indicate if they're set
     res.json({
       telegram_configured: !!(settings.telegram_bot_token && settings.telegram_chat_id),
       telegram_chat_id: settings.telegram_chat_id,
       discord_configured: !!settings.discord_webhook_url,
+      pushover_configured: !!(settings.pushover_user_key && settings.pushover_app_token),
     });
   } catch (error) {
     console.error('Error fetching notification settings:', error);
@@ -34,12 +35,14 @@ router.get('/notifications', async (req: AuthRequest, res: Response) => {
 router.put('/notifications', async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!;
-    const { telegram_bot_token, telegram_chat_id, discord_webhook_url } = req.body;
+    const { telegram_bot_token, telegram_chat_id, discord_webhook_url, pushover_user_key, pushover_app_token } = req.body;
 
     const settings = await userQueries.updateNotificationSettings(userId, {
       telegram_bot_token,
       telegram_chat_id,
       discord_webhook_url,
+      pushover_user_key,
+      pushover_app_token,
     });
 
     if (!settings) {
@@ -51,6 +54,7 @@ router.put('/notifications', async (req: AuthRequest, res: Response) => {
       telegram_configured: !!(settings.telegram_bot_token && settings.telegram_chat_id),
       telegram_chat_id: settings.telegram_chat_id,
       discord_configured: !!settings.discord_webhook_url,
+      pushover_configured: !!(settings.pushover_user_key && settings.pushover_app_token),
       message: 'Notification settings updated successfully',
     });
   } catch (error) {
@@ -123,6 +127,42 @@ router.post('/notifications/test/discord', async (req: AuthRequest, res: Respons
     }
   } catch (error) {
     console.error('Error sending test Discord notification:', error);
+    res.status(500).json({ error: 'Failed to send test notification' });
+  }
+});
+
+// Test Pushover notification
+router.post('/notifications/test/pushover', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const settings = await userQueries.getNotificationSettings(userId);
+
+    if (!settings?.pushover_user_key || !settings?.pushover_app_token) {
+      res.status(400).json({ error: 'Pushover not configured' });
+      return;
+    }
+
+    const { sendPushoverNotification } = await import('../services/notifications');
+    const success = await sendPushoverNotification(
+      settings.pushover_user_key,
+      settings.pushover_app_token,
+      {
+        productName: 'Test Product',
+        productUrl: 'https://example.com',
+        type: 'price_drop',
+        oldPrice: 29.99,
+        newPrice: 19.99,
+        currency: 'USD',
+      }
+    );
+
+    if (success) {
+      res.json({ message: 'Test notification sent successfully' });
+    } else {
+      res.status(500).json({ error: 'Failed to send test notification' });
+    }
+  } catch (error) {
+    console.error('Error sending test Pushover notification:', error);
     res.status(500).json({ error: 'Failed to send test notification' });
   }
 });

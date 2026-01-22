@@ -33,8 +33,10 @@ export default function Settings() {
   const [telegramBotToken, setTelegramBotToken] = useState('');
   const [telegramChatId, setTelegramChatId] = useState('');
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState('');
+  const [pushoverUserKey, setPushoverUserKey] = useState('');
+  const [pushoverAppToken, setPushoverAppToken] = useState('');
   const [isSavingNotifications, setIsSavingNotifications] = useState(false);
-  const [isTesting, setIsTesting] = useState<'telegram' | 'discord' | null>(null);
+  const [isTesting, setIsTesting] = useState<'telegram' | 'discord' | 'pushover' | null>(null);
 
   // AI state
   const [aiSettings, setAISettings] = useState<AISettings | null>(null);
@@ -209,6 +211,38 @@ export default function Settings() {
     try {
       await settingsApi.testDiscord();
       setSuccess('Test notification sent to Discord!');
+    } catch {
+      setError('Failed to send test notification');
+    } finally {
+      setIsTesting(null);
+    }
+  };
+
+  const handleSavePushover = async () => {
+    clearMessages();
+    setIsSavingNotifications(true);
+    try {
+      const response = await settingsApi.updateNotifications({
+        pushover_user_key: pushoverUserKey || null,
+        pushover_app_token: pushoverAppToken || null,
+      });
+      setNotificationSettings(response.data);
+      setPushoverUserKey('');
+      setPushoverAppToken('');
+      setSuccess('Pushover settings saved successfully');
+    } catch {
+      setError('Failed to save Pushover settings');
+    } finally {
+      setIsSavingNotifications(false);
+    }
+  };
+
+  const handleTestPushover = async () => {
+    clearMessages();
+    setIsTesting('pushover');
+    try {
+      await settingsApi.testPushover();
+      setSuccess('Test notification sent to Pushover!');
     } catch {
       setError('Failed to send test notification');
     } finally {
@@ -940,6 +974,61 @@ export default function Settings() {
                       disabled={isTesting === 'discord'}
                     >
                       {isTesting === 'discord' ? 'Sending...' : 'Send Test'}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <div className="settings-section-header">
+                  <span className="settings-section-icon">🔔</span>
+                  <h2 className="settings-section-title">Pushover Notifications</h2>
+                  <span className={`settings-section-status ${notificationSettings?.pushover_configured ? 'configured' : 'not-configured'}`}>
+                    {notificationSettings?.pushover_configured ? 'Configured' : 'Not configured'}
+                  </span>
+                </div>
+                <p className="settings-section-description">
+                  Receive price drop and back-in-stock alerts via Pushover. You'll need to create a Pushover account
+                  and an application to get your keys.
+                </p>
+
+                <div className="settings-form-group">
+                  <label>User Key</label>
+                  <input
+                    type="password"
+                    value={pushoverUserKey}
+                    onChange={(e) => setPushoverUserKey(e.target.value)}
+                    placeholder={notificationSettings?.pushover_configured ? '••••••••••••••••' : 'Enter your user key'}
+                  />
+                  <p className="hint">Find your User Key on the Pushover dashboard after logging in</p>
+                </div>
+
+                <div className="settings-form-group">
+                  <label>Application API Token</label>
+                  <input
+                    type="password"
+                    value={pushoverAppToken}
+                    onChange={(e) => setPushoverAppToken(e.target.value)}
+                    placeholder={notificationSettings?.pushover_configured ? '••••••••••••••••' : 'Enter your app token'}
+                  />
+                  <p className="hint">Create an application at pushover.net/apps to get an API token</p>
+                </div>
+
+                <div className="settings-form-actions">
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleSavePushover}
+                    disabled={isSavingNotifications}
+                  >
+                    {isSavingNotifications ? 'Saving...' : 'Save Pushover Settings'}
+                  </button>
+                  {notificationSettings?.pushover_configured && (
+                    <button
+                      className="btn btn-secondary"
+                      onClick={handleTestPushover}
+                      disabled={isTesting === 'pushover'}
+                    >
+                      {isTesting === 'pushover' ? 'Sending...' : 'Send Test'}
                     </button>
                   )}
                 </div>

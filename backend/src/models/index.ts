@@ -25,6 +25,8 @@ export interface NotificationSettings {
   telegram_bot_token: string | null;
   telegram_chat_id: string | null;
   discord_webhook_url: string | null;
+  pushover_user_key: string | null;
+  pushover_app_token: string | null;
 }
 
 export interface AISettings {
@@ -61,7 +63,7 @@ export const userQueries = {
 
   getNotificationSettings: async (id: number): Promise<NotificationSettings | null> => {
     const result = await pool.query(
-      'SELECT telegram_bot_token, telegram_chat_id, discord_webhook_url FROM users WHERE id = $1',
+      'SELECT telegram_bot_token, telegram_chat_id, discord_webhook_url, pushover_user_key, pushover_app_token FROM users WHERE id = $1',
       [id]
     );
     return result.rows[0] || null;
@@ -87,13 +89,21 @@ export const userQueries = {
       fields.push(`discord_webhook_url = $${paramIndex++}`);
       values.push(settings.discord_webhook_url);
     }
+    if (settings.pushover_user_key !== undefined) {
+      fields.push(`pushover_user_key = $${paramIndex++}`);
+      values.push(settings.pushover_user_key);
+    }
+    if (settings.pushover_app_token !== undefined) {
+      fields.push(`pushover_app_token = $${paramIndex++}`);
+      values.push(settings.pushover_app_token);
+    }
 
     if (fields.length === 0) return null;
 
     values.push(id.toString());
     const result = await pool.query(
       `UPDATE users SET ${fields.join(', ')} WHERE id = $${paramIndex}
-       RETURNING telegram_bot_token, telegram_chat_id, discord_webhook_url`,
+       RETURNING telegram_bot_token, telegram_chat_id, discord_webhook_url, pushover_user_key, pushover_app_token`,
       values
     );
     return result.rows[0] || null;

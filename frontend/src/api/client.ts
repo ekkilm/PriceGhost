@@ -127,6 +127,7 @@ export interface NotificationSettings {
   telegram_configured: boolean;
   telegram_chat_id: string | null;
   discord_configured: boolean;
+  pushover_configured: boolean;
 }
 
 export const settingsApi = {
@@ -137,6 +138,8 @@ export const settingsApi = {
     telegram_bot_token?: string | null;
     telegram_chat_id?: string | null;
     discord_webhook_url?: string | null;
+    pushover_user_key?: string | null;
+    pushover_app_token?: string | null;
   }) => api.put<NotificationSettings & { message: string }>('/settings/notifications', data),
 
   testTelegram: () =>
@@ -144,6 +147,9 @@ export const settingsApi = {
 
   testDiscord: () =>
     api.post<{ message: string }>('/settings/notifications/test/discord'),
+
+  testPushover: () =>
+    api.post<{ message: string }>('/settings/notifications/test/pushover'),
 
   // AI Settings
   getAI: () =>

@@ -139,11 +139,57 @@ export async function sendDiscordNotification(
   }
 }
 
+export async function sendPushoverNotification(
+  userKey: string,
+  appToken: string,
+  payload: NotificationPayload
+): Promise<boolean> {
+  try {
+    const currencySymbol = payload.currency === 'EUR' ? '€' : payload.currency === 'GBP' ? '£' : '$';
+
+    let title: string;
+    let message: string;
+
+    if (payload.type === 'price_drop') {
+      const oldPriceStr = payload.oldPrice ? `${currencySymbol}${payload.oldPrice.toFixed(2)}` : 'N/A';
+      const newPriceStr = payload.newPrice ? `${currencySymbol}${payload.newPrice.toFixed(2)}` : 'N/A';
+      title = '🔔 Price Drop Alert!';
+      message = `${payload.productName}\n\nPrice dropped from ${oldPriceStr} to ${newPriceStr}`;
+    } else if (payload.type === 'target_price') {
+      const newPriceStr = payload.newPrice ? `${currencySymbol}${payload.newPrice.toFixed(2)}` : 'N/A';
+      const targetPriceStr = payload.targetPrice ? `${currencySymbol}${payload.targetPrice.toFixed(2)}` : 'N/A';
+      title = '🎯 Target Price Reached!';
+      message = `${payload.productName}\n\nPrice is now ${newPriceStr} (your target: ${targetPriceStr})`;
+    } else {
+      const priceStr = payload.newPrice ? ` at ${currencySymbol}${payload.newPrice.toFixed(2)}` : '';
+      title = '🎉 Back in Stock!';
+      message = `${payload.productName}\n\nThis item is now available${priceStr}`;
+    }
+
+    await axios.post('https://api.pushover.net/1/messages.json', {
+      token: appToken,
+      user: userKey,
+      title,
+      message,
+      url: payload.productUrl,
+      url_title: 'View Product',
+    });
+
+    console.log('Pushover notification sent');
+    return true;
+  } catch (error) {
+    console.error('Failed to send Pushover notification:', error);
+    return false;
+  }
+}
+
 export async function sendNotifications(
   settings: {
     telegram_bot_token: string | null;
     telegram_chat_id: string | null;
     discord_webhook_url: string | null;
+    pushover_user_key: string | null;
+    pushover_app_token: string | null;
   },
   payload: NotificationPayload
 ): Promise<void> {
@@ -157,6 +203,12 @@ export async function sendNotifications(
 
   if (settings.discord_webhook_url) {
     promises.push(sendDiscordNotification(settings.discord_webhook_url, payload));
+  }
+
+  if (settings.pushover_user_key && settings.pushover_app_token) {
+    promises.push(
+      sendPushoverNotification(settings.pushover_user_key, settings.pushover_app_token, payload)
+    );
   }
 
   await Promise.allSettled(promises);
