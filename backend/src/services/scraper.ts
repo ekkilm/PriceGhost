@@ -175,44 +175,120 @@ const siteScrapers: SiteScraper[] = [
   {
     match: (url) => /walmart\.com/i.test(url),
     scrape: ($) => {
-      // Walmart uses various price containers
-      const priceSelectors = [
-        '[data-testid="price-wrap"] [itemprop="price"]',
-        '[itemprop="price"]',
-        '.price-characteristic',
-        '[data-automation="product-price"]',
-        '.prod-PriceHero .price-group',
-      ];
-
       let price: ParsedPrice | null = null;
-      for (const selector of priceSelectors) {
-        const el = $(selector).first();
-        if (el.length) {
-          const content = el.attr('content');
-          const text = content || el.text().trim();
-          price = parsePrice(text);
-          if (price) break;
-        }
-      }
+      let name: string | null = null;
+      let imageUrl: string | null = null;
+      let stockStatus: StockStatus = 'unknown';
 
-      // Also try to get price from the whole dollars + cents pattern
-      if (!price) {
-        const dollars = $('[data-testid="price-wrap"] .f2').text().trim();
-        const cents = $('[data-testid="price-wrap"] .f6').text().trim();
-        if (dollars) {
-          price = parsePrice(`$${dollars}${cents ? '.' + cents : ''}`);
-        }
-      }
+      // Walmart embeds product data in a __NEXT_DATA__ script tag
+      try {
+        const nextDataScript = $('#__NEXT_DATA__').html();
+        if (nextDataScript) {
+          const nextData = JSON.parse(nextDataScript);
+          const productData = nextData?.props?.pageProps?.initialData?.data?.product ||
+                              nextData?.props?.pageProps?.initialProps?.data?.product;
 
-      const name = $('h1[itemprop="name"]').text().trim() ||
-                   $('h1.prod-ProductTitle').text().trim() ||
-                   null;
+          if (productData) {
+            // Get price from embedded data
+            const priceInfo = productData.priceInfo?.currentPrice ||
+                              productData.priceInfo?.priceRange?.minPrice;
+            if (priceInfo) {
+              price = {
+                price: typeof priceInfo.price === 'number' ? priceInfo.price : parseFloat(priceInfo.price),
+                currency: priceInfo.currencyCode || 'USD',
+              };
+            }
 
-      const imageUrl = $('[data-testid="hero-image-container"] img').attr('src') ||
-                       $('img.prod-hero-image').attr('src') ||
+            // Get name
+            name = productData.name || null;
+
+            // Get image
+            imageUrl = productData.imageInfo?.thumbnailUrl ||
+                       productData.imageInfo?.allImages?.[0]?.url ||
                        null;
 
-      return { name, price, imageUrl };
+            // Get stock status
+            const availability = productData.availabilityStatus ||
+                                 productData.fulfillment?.availabilityStatus;
+            if (availability) {
+              const availLower = availability.toLowerCase();
+              if (availLower === 'in_stock' || availLower === 'available') {
+                stockStatus = 'in_stock';
+              } else if (availLower === 'out_of_stock' || availLower === 'not_available') {
+                stockStatus = 'out_of_stock';
+              }
+            }
+          }
+        }
+      } catch (_e) {
+        // JSON parse error, fall back to HTML scraping
+      }
+
+      // Fallback: Try HTML selectors if __NEXT_DATA__ didn't work
+      if (!price) {
+        const priceSelectors = [
+          '[itemprop="price"]',
+          '[data-testid="price-wrap"] span[class*="price"]',
+          '.price-characteristic',
+          '[data-automation="product-price"]',
+          'span[data-automation-id="product-price"]',
+        ];
+
+        for (const selector of priceSelectors) {
+          const el = $(selector).first();
+          if (el.length) {
+            const content = el.attr('content');
+            const text = content || el.text().trim();
+            price = parsePrice(text);
+            if (price) break;
+          }
+        }
+      }
+
+      // Fallback: Try price from whole dollars + cents pattern
+      if (!price) {
+        const priceText = $('[itemprop="price"]').attr('content');
+        if (priceText) {
+          price = parsePrice(priceText);
+        }
+      }
+
+      if (!name) {
+        name = $('h1[itemprop="name"]').text().trim() ||
+               $('h1#main-title').text().trim() ||
+               $('[data-testid="product-title"]').text().trim() ||
+               null;
+      }
+
+      if (!imageUrl) {
+        imageUrl = $('[data-testid="hero-image-container"] img').attr('src') ||
+                   $('img[data-testid="hero-image"]').attr('src') ||
+                   $('meta[property="og:image"]').attr('content') ||
+                   null;
+      }
+
+      // Fallback stock status from HTML if not found
+      if (stockStatus === 'unknown') {
+        const addToCartBtn = $('[data-testid="add-to-cart-button"]').length > 0 ||
+                             $('button[aria-label*="Add to cart"]').length > 0;
+        const outOfStockText = $('[data-testid="out-of-stock-message"]').length > 0 ||
+                               $('body').text().toLowerCase().includes('out of stock');
+
+        if (addToCartBtn) {
+          stockStatus = 'in_stock';
+        } else if (outOfStockText) {
+          // Only mark as out of stock if we're confident
+          const bodyText = $('body').text().toLowerCase();
+          // Check specifically for this product being out of stock
+          if (bodyText.includes('this item is currently out of stock') ||
+              bodyText.includes('this product is currently unavailable') ||
+              $('[data-testid="out-of-stock-message"]').length > 0) {
+            stockStatus = 'out_of_stock';
+          }
+        }
+      }
+
+      return { name, price, imageUrl, stockStatus };
     },
   },
 
@@ -756,53 +832,7 @@ function extractGenericImage($: CheerioAPI, baseUrl: string): string | null {
 }
 
 function extractGenericStockStatus($: CheerioAPI): StockStatus {
-  const bodyText = $('body').text().toLowerCase();
-
-  // Common out-of-stock indicators
-  const outOfStockPatterns = [
-    'out of stock',
-    'currently unavailable',
-    'not available',
-    'sold out',
-    'no longer available',
-    'temporarily out of stock',
-    'unavailable',
-    'back in stock soon',
-    'notify me when available',
-    'out-of-stock',
-  ];
-
-  // Common in-stock indicators
-  const inStockPatterns = [
-    'in stock',
-    'add to cart',
-    'add to basket',
-    'buy now',
-    'available',
-    'ships from',
-    'ready to ship',
-  ];
-
-  // Check for out-of-stock patterns
-  for (const pattern of outOfStockPatterns) {
-    if (bodyText.includes(pattern)) {
-      // Make sure it's not negated (e.g., "not out of stock")
-      const index = bodyText.indexOf(pattern);
-      const before = bodyText.slice(Math.max(0, index - 10), index);
-      if (!before.includes('not ') && !before.includes("isn't ") && !before.includes("won't be ")) {
-        return 'out_of_stock';
-      }
-    }
-  }
-
-  // Check for in-stock indicators
-  for (const pattern of inStockPatterns) {
-    if (bodyText.includes(pattern)) {
-      return 'in_stock';
-    }
-  }
-
-  // Check for schema.org availability
+  // First, check for schema.org availability - most reliable
   const availability = $('[itemprop="availability"]').attr('content') ||
                        $('[itemprop="availability"]').attr('href') || '';
   if (availability.toLowerCase().includes('outofstock') ||
@@ -814,6 +844,49 @@ function extractGenericStockStatus($: CheerioAPI): StockStatus {
     return 'in_stock';
   }
 
+  // Check for add to cart button - strong indicator of in stock
+  const hasAddToCart = $('button[class*="add-to-cart" i]').length > 0 ||
+                       $('button[id*="add-to-cart" i]').length > 0 ||
+                       $('[data-testid*="add-to-cart" i]').length > 0 ||
+                       $('button:contains("Add to Cart")').length > 0 ||
+                       $('input[value*="Add to Cart" i]').length > 0;
+
+  if (hasAddToCart) {
+    return 'in_stock';
+  }
+
+  // Check for explicit out-of-stock elements - be specific
+  const hasOutOfStockBadge = $('[class*="out-of-stock" i]').length > 0 ||
+                              $('[class*="sold-out" i]').length > 0 ||
+                              $('[data-testid*="out-of-stock" i]').length > 0;
+
+  if (hasOutOfStockBadge) {
+    return 'out_of_stock';
+  }
+
+  // Be conservative - only check main product area text, not entire body
+  // to avoid false positives from sidebar recommendations, etc.
+  const mainContent = $('main, [role="main"], #main, .main-content, .product-detail, .pdp-main').text().toLowerCase();
+  const textToCheck = mainContent || $('body').text().toLowerCase().slice(0, 5000);
+
+  // Strong out-of-stock phrases (must be exact matches to avoid false positives)
+  const strongOutOfStockPhrases = [
+    'this item is out of stock',
+    'this product is out of stock',
+    'currently out of stock',
+    'this item is currently unavailable',
+    'this product is currently unavailable',
+    'temporarily out of stock',
+    'this item is sold out',
+  ];
+
+  for (const phrase of strongOutOfStockPhrases) {
+    if (textToCheck.includes(phrase)) {
+      return 'out_of_stock';
+    }
+  }
+
+  // Default to unknown rather than guessing
   return 'unknown';
 }
 
