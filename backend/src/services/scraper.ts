@@ -21,11 +21,13 @@ async function scrapeWithBrowser(url: string): Promise<string> {
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--disable-gpu',
+      '--disable-blink-features=AutomationControlled',
+      '--disable-infobars',
       '--window-size=1920,1080',
+      '--start-maximized',
     ],
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+    ignoreDefaultArgs: ['--enable-automation'],
   });
 
   try {
@@ -40,9 +42,14 @@ async function scrapeWithBrowser(url: string): Promise<string> {
       timeout: 45000,
     });
 
+    // Add some human-like behavior
+    await page.mouse.move(100, 200);
+    await new Promise(resolve => setTimeout(resolve, 500));
+    await page.mouse.move(300, 400);
+
     // Wait for Cloudflare challenge to complete if present
     // Check if we're on a challenge page and wait for it to resolve
-    const maxWaitTime = 15000;
+    const maxWaitTime = 20000;
     const startTime = Date.now();
 
     while (Date.now() - startTime < maxWaitTime) {
@@ -53,11 +60,18 @@ async function scrapeWithBrowser(url: string): Promise<string> {
         break;
       }
       console.log(`[Browser] Waiting for Cloudflare challenge to complete... (${title})`);
+      // Move mouse randomly while waiting
+      await page.mouse.move(
+        100 + Math.random() * 500,
+        100 + Math.random() * 400
+      );
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
 
-    // Additional wait for dynamic content
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Scroll down a bit like a human would
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    await page.evaluate('window.scrollBy(0, 300)');
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Get the full HTML content
     const html = await page.content();
