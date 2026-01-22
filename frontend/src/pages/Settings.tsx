@@ -6,11 +6,12 @@ import {
   profileApi,
   adminApi,
   NotificationSettings,
+  AISettings,
   UserProfile,
   SystemSettings,
 } from '../api/client';
 
-type SettingsSection = 'profile' | 'notifications' | 'admin';
+type SettingsSection = 'profile' | 'notifications' | 'ai' | 'admin';
 
 export default function Settings() {
   const [activeSection, setActiveSection] = useState<SettingsSection>('profile');
@@ -35,6 +36,16 @@ export default function Settings() {
   const [isSavingNotifications, setIsSavingNotifications] = useState(false);
   const [isTesting, setIsTesting] = useState<'telegram' | 'discord' | null>(null);
 
+  // AI state
+  const [aiSettings, setAISettings] = useState<AISettings | null>(null);
+  const [aiEnabled, setAIEnabled] = useState(false);
+  const [aiProvider, setAIProvider] = useState<'anthropic' | 'openai'>('anthropic');
+  const [anthropicApiKey, setAnthropicApiKey] = useState('');
+  const [openaiApiKey, setOpenaiApiKey] = useState('');
+  const [isSavingAI, setIsSavingAI] = useState(false);
+  const [isTestingAI, setIsTestingAI] = useState(false);
+  const [testUrl, setTestUrl] = useState('');
+
   // Admin state
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
@@ -52,15 +63,21 @@ export default function Settings() {
 
   const fetchInitialData = async () => {
     try {
-      const [profileRes, notificationsRes] = await Promise.all([
+      const [profileRes, notificationsRes, aiRes] = await Promise.all([
         profileApi.get(),
         settingsApi.getNotifications(),
+        settingsApi.getAI(),
       ]);
       setProfile(profileRes.data);
       setProfileName(profileRes.data.name || '');
       setNotificationSettings(notificationsRes.data);
       if (notificationsRes.data.telegram_chat_id) {
         setTelegramChatId(notificationsRes.data.telegram_chat_id);
+      }
+      setAISettings(aiRes.data);
+      setAIEnabled(aiRes.data.ai_enabled);
+      if (aiRes.data.ai_provider) {
+        setAIProvider(aiRes.data.ai_provider);
       }
     } catch {
       setError('Failed to load settings');
@@ -196,6 +213,53 @@ export default function Settings() {
       setError('Failed to send test notification');
     } finally {
       setIsTesting(null);
+    }
+  };
+
+  // AI handlers
+  const handleSaveAI = async () => {
+    clearMessages();
+    setIsSavingAI(true);
+    try {
+      const response = await settingsApi.updateAI({
+        ai_enabled: aiEnabled,
+        ai_provider: aiProvider,
+        anthropic_api_key: anthropicApiKey || undefined,
+        openai_api_key: openaiApiKey || undefined,
+      });
+      setAISettings(response.data);
+      setAnthropicApiKey('');
+      setOpenaiApiKey('');
+      setSuccess('AI settings saved successfully');
+    } catch {
+      setError('Failed to save AI settings');
+    } finally {
+      setIsSavingAI(false);
+    }
+  };
+
+  const handleTestAI = async () => {
+    clearMessages();
+    if (!testUrl) {
+      setError('Please enter a URL to test');
+      return;
+    }
+    setIsTestingAI(true);
+    try {
+      const response = await settingsApi.testAI(testUrl);
+      if (response.data.success && response.data.price) {
+        setSuccess(
+          `AI extraction successful! Found: ${response.data.name || 'Unknown'} - ` +
+          `${response.data.price.currency} ${response.data.price.price.toFixed(2)} ` +
+          `(confidence: ${(response.data.confidence * 100).toFixed(0)}%)`
+        );
+      } else {
+        setError('AI could not extract price from this URL');
+      }
+    } catch {
+      setError('Failed to test AI extraction');
+    } finally {
+      setIsTestingAI(false);
     }
   };
 
@@ -660,6 +724,17 @@ export default function Settings() {
               </svg>
               Notifications
             </button>
+            <button
+              className={`settings-nav-item ${activeSection === 'ai' ? 'active' : ''}`}
+              onClick={() => { setActiveSection('ai'); clearMessages(); }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z" />
+                <path d="M9 14v2" />
+                <path d="M15 14v2" />
+              </svg>
+              AI Extraction
+            </button>
             {profile?.is_admin && (
               <button
                 className={`settings-nav-item ${activeSection === 'admin' ? 'active' : ''}`}
@@ -869,6 +944,141 @@ export default function Settings() {
                   )}
                 </div>
               </div>
+            </>
+          )}
+
+          {activeSection === 'ai' && (
+            <>
+              <div className="settings-section">
+                <div className="settings-section-header">
+                  <span className="settings-section-icon">🤖</span>
+                  <h2 className="settings-section-title">AI-Powered Price Extraction</h2>
+                  <span className={`settings-section-status ${aiSettings?.ai_enabled ? 'configured' : 'not-configured'}`}>
+                    {aiSettings?.ai_enabled ? 'Enabled' : 'Disabled'}
+                  </span>
+                </div>
+                <p className="settings-section-description">
+                  Enable AI-powered price extraction for better compatibility with websites that standard scraping can't handle.
+                  When enabled, AI will be used as a fallback when regular scraping fails to find a price.
+                </p>
+
+                <div className="settings-toggle">
+                  <div className="settings-toggle-label">
+                    <span className="settings-toggle-title">Enable AI Extraction</span>
+                    <span className="settings-toggle-description">
+                      Use AI as a fallback when standard scraping fails
+                    </span>
+                  </div>
+                  <button
+                    className={`toggle-switch ${aiEnabled ? 'active' : ''}`}
+                    onClick={() => setAIEnabled(!aiEnabled)}
+                  />
+                </div>
+
+                {aiEnabled && (
+                  <>
+                    <div className="settings-form-group">
+                      <label>AI Provider</label>
+                      <select
+                        value={aiProvider}
+                        onChange={(e) => setAIProvider(e.target.value as 'anthropic' | 'openai')}
+                        style={{
+                          width: '100%',
+                          padding: '0.625rem 0.75rem',
+                          border: '1px solid var(--border)',
+                          borderRadius: '0.375rem',
+                          background: 'var(--background)',
+                          color: 'var(--text)',
+                          fontSize: '0.875rem'
+                        }}
+                      >
+                        <option value="anthropic">Anthropic (Claude)</option>
+                        <option value="openai">OpenAI (GPT)</option>
+                      </select>
+                    </div>
+
+                    {aiProvider === 'anthropic' && (
+                      <div className="settings-form-group">
+                        <label>Anthropic API Key</label>
+                        <input
+                          type="password"
+                          value={anthropicApiKey}
+                          onChange={(e) => setAnthropicApiKey(e.target.value)}
+                          placeholder={aiSettings?.anthropic_configured ? '••••••••••••••••' : 'sk-ant-...'}
+                        />
+                        <p className="hint">
+                          Get your API key from{' '}
+                          <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer">
+                            console.anthropic.com
+                          </a>
+                          {aiSettings?.anthropic_configured && ' (key already saved)'}
+                        </p>
+                      </div>
+                    )}
+
+                    {aiProvider === 'openai' && (
+                      <div className="settings-form-group">
+                        <label>OpenAI API Key</label>
+                        <input
+                          type="password"
+                          value={openaiApiKey}
+                          onChange={(e) => setOpenaiApiKey(e.target.value)}
+                          placeholder={aiSettings?.openai_configured ? '••••••••••••••••' : 'sk-...'}
+                        />
+                        <p className="hint">
+                          Get your API key from{' '}
+                          <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">
+                            platform.openai.com
+                          </a>
+                          {aiSettings?.openai_configured && ' (key already saved)'}
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <div className="settings-form-actions">
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleSaveAI}
+                    disabled={isSavingAI}
+                  >
+                    {isSavingAI ? 'Saving...' : 'Save AI Settings'}
+                  </button>
+                </div>
+              </div>
+
+              {aiSettings?.ai_enabled && (aiSettings.anthropic_configured || aiSettings.openai_configured) && (
+                <div className="settings-section">
+                  <div className="settings-section-header">
+                    <span className="settings-section-icon">🧪</span>
+                    <h2 className="settings-section-title">Test AI Extraction</h2>
+                  </div>
+                  <p className="settings-section-description">
+                    Test AI extraction on a product URL to see if it can successfully extract the price.
+                  </p>
+
+                  <div className="settings-form-group">
+                    <label>Product URL</label>
+                    <input
+                      type="url"
+                      value={testUrl}
+                      onChange={(e) => setTestUrl(e.target.value)}
+                      placeholder="https://example.com/product"
+                    />
+                  </div>
+
+                  <div className="settings-form-actions">
+                    <button
+                      className="btn btn-secondary"
+                      onClick={handleTestAI}
+                      disabled={isTestingAI || !testUrl}
+                    >
+                      {isTestingAI ? 'Testing...' : 'Test Extraction'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </>
           )}
 

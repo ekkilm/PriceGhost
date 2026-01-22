@@ -143,7 +143,38 @@ export const settingsApi = {
 
   testDiscord: () =>
     api.post<{ message: string }>('/settings/notifications/test/discord'),
+
+  // AI Settings
+  getAI: () =>
+    api.get<AISettings>('/settings/ai'),
+
+  updateAI: (data: {
+    ai_enabled?: boolean;
+    ai_provider?: 'anthropic' | 'openai' | null;
+    anthropic_api_key?: string | null;
+    openai_api_key?: string | null;
+  }) => api.put<AISettings & { message: string }>('/settings/ai', data),
+
+  testAI: (url: string) =>
+    api.post<AITestResult>('/settings/ai/test', { url }),
 };
+
+// AI Settings types
+export interface AISettings {
+  ai_enabled: boolean;
+  ai_provider: 'anthropic' | 'openai' | null;
+  anthropic_configured: boolean;
+  openai_configured: boolean;
+}
+
+export interface AITestResult {
+  success: boolean;
+  name: string | null;
+  price: { price: number; currency: string } | null;
+  imageUrl: string | null;
+  stockStatus: string;
+  confidence: number;
+}
 
 // Profile API
 export interface UserProfile {

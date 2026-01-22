@@ -23,7 +23,7 @@ async function checkPrices(): Promise<void> {
       try {
         console.log(`Checking price for product ${product.id}: ${product.url}`);
 
-        const scrapedData = await scrapeProduct(product.url);
+        const scrapedData = await scrapeProduct(product.url, product.user_id);
 
         // Check for back-in-stock notification
         const wasOutOfStock = product.stock_status === 'out_of_stock';

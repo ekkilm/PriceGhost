@@ -27,6 +27,13 @@ export interface NotificationSettings {
   discord_webhook_url: string | null;
 }
 
+export interface AISettings {
+  ai_enabled: boolean;
+  ai_provider: 'anthropic' | 'openai' | null;
+  anthropic_api_key: string | null;
+  openai_api_key: string | null;
+}
+
 export const userQueries = {
   findByEmail: async (email: string): Promise<User | null> => {
     const result = await pool.query(
@@ -154,6 +161,50 @@ export const userQueries = {
       [isAdmin, id]
     );
     return (result.rowCount ?? 0) > 0;
+  },
+
+  getAISettings: async (id: number): Promise<AISettings | null> => {
+    const result = await pool.query(
+      'SELECT ai_enabled, ai_provider, anthropic_api_key, openai_api_key FROM users WHERE id = $1',
+      [id]
+    );
+    return result.rows[0] || null;
+  },
+
+  updateAISettings: async (
+    id: number,
+    settings: Partial<AISettings>
+  ): Promise<AISettings | null> => {
+    const fields: string[] = [];
+    const values: (string | boolean | null)[] = [];
+    let paramIndex = 1;
+
+    if (settings.ai_enabled !== undefined) {
+      fields.push(`ai_enabled = $${paramIndex++}`);
+      values.push(settings.ai_enabled);
+    }
+    if (settings.ai_provider !== undefined) {
+      fields.push(`ai_provider = $${paramIndex++}`);
+      values.push(settings.ai_provider);
+    }
+    if (settings.anthropic_api_key !== undefined) {
+      fields.push(`anthropic_api_key = $${paramIndex++}`);
+      values.push(settings.anthropic_api_key);
+    }
+    if (settings.openai_api_key !== undefined) {
+      fields.push(`openai_api_key = $${paramIndex++}`);
+      values.push(settings.openai_api_key);
+    }
+
+    if (fields.length === 0) return null;
+
+    values.push(id.toString());
+    const result = await pool.query(
+      `UPDATE users SET ${fields.join(', ')} WHERE id = $${paramIndex}
+       RETURNING ai_enabled, ai_provider, anthropic_api_key, openai_api_key`,
+      values
+    );
+    return result.rows[0] || null;
   },
 };
 

@@ -127,4 +127,89 @@ router.post('/notifications/test/discord', async (req: AuthRequest, res: Respons
   }
 });
 
+// Get AI settings
+router.get('/ai', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const settings = await userQueries.getAISettings(userId);
+
+    if (!settings) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    // Don't expose full API keys, just indicate if they're set
+    res.json({
+      ai_enabled: settings.ai_enabled || false,
+      ai_provider: settings.ai_provider || null,
+      anthropic_configured: !!settings.anthropic_api_key,
+      openai_configured: !!settings.openai_api_key,
+    });
+  } catch (error) {
+    console.error('Error fetching AI settings:', error);
+    res.status(500).json({ error: 'Failed to fetch AI settings' });
+  }
+});
+
+// Update AI settings
+router.put('/ai', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const { ai_enabled, ai_provider, anthropic_api_key, openai_api_key } = req.body;
+
+    const settings = await userQueries.updateAISettings(userId, {
+      ai_enabled,
+      ai_provider,
+      anthropic_api_key,
+      openai_api_key,
+    });
+
+    if (!settings) {
+      res.status(400).json({ error: 'No settings to update' });
+      return;
+    }
+
+    res.json({
+      ai_enabled: settings.ai_enabled || false,
+      ai_provider: settings.ai_provider || null,
+      anthropic_configured: !!settings.anthropic_api_key,
+      openai_configured: !!settings.openai_api_key,
+      message: 'AI settings updated successfully',
+    });
+  } catch (error) {
+    console.error('Error updating AI settings:', error);
+    res.status(500).json({ error: 'Failed to update AI settings' });
+  }
+});
+
+// Test AI extraction
+router.post('/ai/test', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const { url } = req.body;
+
+    if (!url) {
+      res.status(400).json({ error: 'URL is required' });
+      return;
+    }
+
+    const settings = await userQueries.getAISettings(userId);
+    if (!settings?.ai_enabled) {
+      res.status(400).json({ error: 'AI extraction is not enabled' });
+      return;
+    }
+
+    const { extractWithAI } = await import('../services/ai-extractor');
+    const result = await extractWithAI(url, settings);
+
+    res.json({
+      success: !!result.price,
+      ...result,
+    });
+  } catch (error) {
+    console.error('Error testing AI extraction:', error);
+    res.status(500).json({ error: 'Failed to test AI extraction' });
+  }
+});
+
 export default router;

@@ -664,7 +664,7 @@ const genericImageSelectors = [
   'img[class*="product"]',
 ];
 
-export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
+export async function scrapeProduct(url: string, userId?: number): Promise<ScrapedProduct> {
   const result: ScrapedProduct = {
     name: null,
     price: null,
@@ -673,8 +673,9 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
     stockStatus: 'unknown',
   };
 
+  let html: string = '';
+
   try {
-    let html: string;
     let usedBrowser = false;
 
     try {
@@ -765,6 +766,26 @@ export async function scrapeProduct(url: string): Promise<ScrapedProduct> {
     }
     if (!result.imageUrl) {
       result.imageUrl = $('meta[property="og:image"]').attr('content') || null;
+    }
+
+    // If we still don't have a price and userId is provided, try AI extraction
+    if (!result.price && userId && html) {
+      try {
+        const { tryAIExtraction } = await import('./ai-extractor');
+        const aiResult = await tryAIExtraction(url, html, userId);
+
+        if (aiResult && aiResult.price && aiResult.confidence > 0.5) {
+          console.log(`[AI] Successfully extracted price for ${url}: ${aiResult.price.price} (confidence: ${aiResult.confidence})`);
+          result.price = aiResult.price;
+          if (!result.name && aiResult.name) result.name = aiResult.name;
+          if (!result.imageUrl && aiResult.imageUrl) result.imageUrl = aiResult.imageUrl;
+          if (result.stockStatus === 'unknown' && aiResult.stockStatus !== 'unknown') {
+            result.stockStatus = aiResult.stockStatus;
+          }
+        }
+      } catch (aiError) {
+        console.error(`[AI] Extraction failed for ${url}:`, aiError);
+      }
     }
   } catch (error) {
     console.error(`Error scraping ${url}:`, error);

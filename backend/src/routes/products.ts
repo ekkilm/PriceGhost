@@ -39,8 +39,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    // Scrape product info
-    const scrapedData = await scrapeProduct(url);
+    // Scrape product info (pass userId for AI fallback)
+    const scrapedData = await scrapeProduct(url, userId);
 
     // Allow adding out-of-stock products, but require a price for in-stock ones
     if (!scrapedData.price && scrapedData.stockStatus !== 'out_of_stock') {
