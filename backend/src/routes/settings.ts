@@ -22,8 +22,11 @@ router.get('/notifications', async (req: AuthRequest, res: Response) => {
     res.json({
       telegram_configured: !!(settings.telegram_bot_token && settings.telegram_chat_id),
       telegram_chat_id: settings.telegram_chat_id,
+      telegram_enabled: settings.telegram_enabled ?? true,
       discord_configured: !!settings.discord_webhook_url,
+      discord_enabled: settings.discord_enabled ?? true,
       pushover_configured: !!(settings.pushover_user_key && settings.pushover_app_token),
+      pushover_enabled: settings.pushover_enabled ?? true,
     });
   } catch (error) {
     console.error('Error fetching notification settings:', error);
@@ -35,14 +38,26 @@ router.get('/notifications', async (req: AuthRequest, res: Response) => {
 router.put('/notifications', async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!;
-    const { telegram_bot_token, telegram_chat_id, discord_webhook_url, pushover_user_key, pushover_app_token } = req.body;
+    const {
+      telegram_bot_token,
+      telegram_chat_id,
+      telegram_enabled,
+      discord_webhook_url,
+      discord_enabled,
+      pushover_user_key,
+      pushover_app_token,
+      pushover_enabled,
+    } = req.body;
 
     const settings = await userQueries.updateNotificationSettings(userId, {
       telegram_bot_token,
       telegram_chat_id,
+      telegram_enabled,
       discord_webhook_url,
+      discord_enabled,
       pushover_user_key,
       pushover_app_token,
+      pushover_enabled,
     });
 
     if (!settings) {
@@ -53,8 +68,11 @@ router.put('/notifications', async (req: AuthRequest, res: Response) => {
     res.json({
       telegram_configured: !!(settings.telegram_bot_token && settings.telegram_chat_id),
       telegram_chat_id: settings.telegram_chat_id,
+      telegram_enabled: settings.telegram_enabled ?? true,
       discord_configured: !!settings.discord_webhook_url,
+      discord_enabled: settings.discord_enabled ?? true,
       pushover_configured: !!(settings.pushover_user_key && settings.pushover_app_token),
+      pushover_enabled: settings.pushover_enabled ?? true,
       message: 'Notification settings updated successfully',
     });
   } catch (error) {

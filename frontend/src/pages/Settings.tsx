@@ -32,9 +32,12 @@ export default function Settings() {
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings | null>(null);
   const [telegramBotToken, setTelegramBotToken] = useState('');
   const [telegramChatId, setTelegramChatId] = useState('');
+  const [telegramEnabled, setTelegramEnabled] = useState(true);
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState('');
+  const [discordEnabled, setDiscordEnabled] = useState(true);
   const [pushoverUserKey, setPushoverUserKey] = useState('');
   const [pushoverAppToken, setPushoverAppToken] = useState('');
+  const [pushoverEnabled, setPushoverEnabled] = useState(true);
   const [isSavingNotifications, setIsSavingNotifications] = useState(false);
   const [isTesting, setIsTesting] = useState<'telegram' | 'discord' | 'pushover' | null>(null);
 
@@ -76,6 +79,9 @@ export default function Settings() {
       if (notificationsRes.data.telegram_chat_id) {
         setTelegramChatId(notificationsRes.data.telegram_chat_id);
       }
+      setTelegramEnabled(notificationsRes.data.telegram_enabled ?? true);
+      setDiscordEnabled(notificationsRes.data.discord_enabled ?? true);
+      setPushoverEnabled(notificationsRes.data.pushover_enabled ?? true);
       setAISettings(aiRes.data);
       setAIEnabled(aiRes.data.ai_enabled);
       if (aiRes.data.ai_provider) {
@@ -247,6 +253,39 @@ export default function Settings() {
       setError('Failed to send test notification');
     } finally {
       setIsTesting(null);
+    }
+  };
+
+  const handleToggleTelegram = async (enabled: boolean) => {
+    setTelegramEnabled(enabled);
+    try {
+      const response = await settingsApi.updateNotifications({ telegram_enabled: enabled });
+      setNotificationSettings(response.data);
+    } catch {
+      setTelegramEnabled(!enabled);
+      setError('Failed to update Telegram status');
+    }
+  };
+
+  const handleToggleDiscord = async (enabled: boolean) => {
+    setDiscordEnabled(enabled);
+    try {
+      const response = await settingsApi.updateNotifications({ discord_enabled: enabled });
+      setNotificationSettings(response.data);
+    } catch {
+      setDiscordEnabled(!enabled);
+      setError('Failed to update Discord status');
+    }
+  };
+
+  const handleTogglePushover = async (enabled: boolean) => {
+    setPushoverEnabled(enabled);
+    try {
+      const response = await settingsApi.updateNotifications({ pushover_enabled: enabled });
+      setNotificationSettings(response.data);
+    } catch {
+      setPushoverEnabled(!enabled);
+      setError('Failed to update Pushover status');
     }
   };
 
@@ -893,6 +932,21 @@ export default function Settings() {
                   and get your chat ID.
                 </p>
 
+                {notificationSettings?.telegram_configured && (
+                  <div className="settings-toggle">
+                    <div className="settings-toggle-label">
+                      <span className="settings-toggle-title">Enable Telegram Notifications</span>
+                      <span className="settings-toggle-description">
+                        Toggle to enable or disable Telegram alerts
+                      </span>
+                    </div>
+                    <button
+                      className={`toggle-switch ${telegramEnabled ? 'active' : ''}`}
+                      onClick={() => handleToggleTelegram(!telegramEnabled)}
+                    />
+                  </div>
+                )}
+
                 <div className="settings-form-group">
                   <label>Bot Token</label>
                   <input
@@ -948,6 +1002,21 @@ export default function Settings() {
                   Discord server settings.
                 </p>
 
+                {notificationSettings?.discord_configured && (
+                  <div className="settings-toggle">
+                    <div className="settings-toggle-label">
+                      <span className="settings-toggle-title">Enable Discord Notifications</span>
+                      <span className="settings-toggle-description">
+                        Toggle to enable or disable Discord alerts
+                      </span>
+                    </div>
+                    <button
+                      className={`toggle-switch ${discordEnabled ? 'active' : ''}`}
+                      onClick={() => handleToggleDiscord(!discordEnabled)}
+                    />
+                  </div>
+                )}
+
                 <div className="settings-form-group">
                   <label>Webhook URL</label>
                   <input
@@ -991,6 +1060,21 @@ export default function Settings() {
                   Receive price drop and back-in-stock alerts via Pushover. You'll need to create a Pushover account
                   and an application to get your keys.
                 </p>
+
+                {notificationSettings?.pushover_configured && (
+                  <div className="settings-toggle">
+                    <div className="settings-toggle-label">
+                      <span className="settings-toggle-title">Enable Pushover Notifications</span>
+                      <span className="settings-toggle-description">
+                        Toggle to enable or disable Pushover alerts
+                      </span>
+                    </div>
+                    <button
+                      className={`toggle-switch ${pushoverEnabled ? 'active' : ''}`}
+                      onClick={() => handleTogglePushover(!pushoverEnabled)}
+                    />
+                  </div>
+                )}
 
                 <div className="settings-form-group">
                   <label>User Key</label>

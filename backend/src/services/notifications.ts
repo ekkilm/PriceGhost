@@ -187,25 +187,29 @@ export async function sendNotifications(
   settings: {
     telegram_bot_token: string | null;
     telegram_chat_id: string | null;
+    telegram_enabled?: boolean;
     discord_webhook_url: string | null;
+    discord_enabled?: boolean;
     pushover_user_key: string | null;
     pushover_app_token: string | null;
+    pushover_enabled?: boolean;
   },
   payload: NotificationPayload
 ): Promise<void> {
   const promises: Promise<boolean>[] = [];
 
-  if (settings.telegram_bot_token && settings.telegram_chat_id) {
+  // Only send if channel is configured AND enabled (default to true if not specified)
+  if (settings.telegram_bot_token && settings.telegram_chat_id && settings.telegram_enabled !== false) {
     promises.push(
       sendTelegramNotification(settings.telegram_bot_token, settings.telegram_chat_id, payload)
     );
   }
 
-  if (settings.discord_webhook_url) {
+  if (settings.discord_webhook_url && settings.discord_enabled !== false) {
     promises.push(sendDiscordNotification(settings.discord_webhook_url, payload));
   }
 
-  if (settings.pushover_user_key && settings.pushover_app_token) {
+  if (settings.pushover_user_key && settings.pushover_app_token && settings.pushover_enabled !== false) {
     promises.push(
       sendPushoverNotification(settings.pushover_user_key, settings.pushover_app_token, payload)
     );

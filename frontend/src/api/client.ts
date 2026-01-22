@@ -126,8 +126,11 @@ export const pricesApi = {
 export interface NotificationSettings {
   telegram_configured: boolean;
   telegram_chat_id: string | null;
+  telegram_enabled: boolean;
   discord_configured: boolean;
+  discord_enabled: boolean;
   pushover_configured: boolean;
+  pushover_enabled: boolean;
 }
 
 export const settingsApi = {
@@ -137,9 +140,12 @@ export const settingsApi = {
   updateNotifications: (data: {
     telegram_bot_token?: string | null;
     telegram_chat_id?: string | null;
+    telegram_enabled?: boolean;
     discord_webhook_url?: string | null;
+    discord_enabled?: boolean;
     pushover_user_key?: string | null;
     pushover_app_token?: string | null;
+    pushover_enabled?: boolean;
   }) => api.put<NotificationSettings & { message: string }>('/settings/notifications', data),
 
   testTelegram: () =>

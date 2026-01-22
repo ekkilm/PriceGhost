@@ -37,6 +37,15 @@ async function runMigrations() {
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'pushover_app_token') THEN
           ALTER TABLE users ADD COLUMN pushover_app_token TEXT;
         END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'telegram_enabled') THEN
+          ALTER TABLE users ADD COLUMN telegram_enabled BOOLEAN DEFAULT true;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'discord_enabled') THEN
+          ALTER TABLE users ADD COLUMN discord_enabled BOOLEAN DEFAULT true;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'pushover_enabled') THEN
+          ALTER TABLE users ADD COLUMN pushover_enabled BOOLEAN DEFAULT true;
+        END IF;
       END $$;
     `);
     console.log('Database migrations completed');

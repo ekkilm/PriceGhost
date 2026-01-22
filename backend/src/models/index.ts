@@ -24,9 +24,12 @@ export interface UserProfile {
 export interface NotificationSettings {
   telegram_bot_token: string | null;
   telegram_chat_id: string | null;
+  telegram_enabled: boolean;
   discord_webhook_url: string | null;
+  discord_enabled: boolean;
   pushover_user_key: string | null;
   pushover_app_token: string | null;
+  pushover_enabled: boolean;
 }
 
 export interface AISettings {
@@ -63,7 +66,10 @@ export const userQueries = {
 
   getNotificationSettings: async (id: number): Promise<NotificationSettings | null> => {
     const result = await pool.query(
-      'SELECT telegram_bot_token, telegram_chat_id, discord_webhook_url, pushover_user_key, pushover_app_token FROM users WHERE id = $1',
+      `SELECT telegram_bot_token, telegram_chat_id, COALESCE(telegram_enabled, true) as telegram_enabled,
+              discord_webhook_url, COALESCE(discord_enabled, true) as discord_enabled,
+              pushover_user_key, pushover_app_token, COALESCE(pushover_enabled, true) as pushover_enabled
+       FROM users WHERE id = $1`,
       [id]
     );
     return result.rows[0] || null;
@@ -74,7 +80,7 @@ export const userQueries = {
     settings: Partial<NotificationSettings>
   ): Promise<NotificationSettings | null> => {
     const fields: string[] = [];
-    const values: (string | null)[] = [];
+    const values: (string | boolean | null)[] = [];
     let paramIndex = 1;
 
     if (settings.telegram_bot_token !== undefined) {
@@ -85,9 +91,17 @@ export const userQueries = {
       fields.push(`telegram_chat_id = $${paramIndex++}`);
       values.push(settings.telegram_chat_id);
     }
+    if (settings.telegram_enabled !== undefined) {
+      fields.push(`telegram_enabled = $${paramIndex++}`);
+      values.push(settings.telegram_enabled);
+    }
     if (settings.discord_webhook_url !== undefined) {
       fields.push(`discord_webhook_url = $${paramIndex++}`);
       values.push(settings.discord_webhook_url);
+    }
+    if (settings.discord_enabled !== undefined) {
+      fields.push(`discord_enabled = $${paramIndex++}`);
+      values.push(settings.discord_enabled);
     }
     if (settings.pushover_user_key !== undefined) {
       fields.push(`pushover_user_key = $${paramIndex++}`);
@@ -97,13 +111,19 @@ export const userQueries = {
       fields.push(`pushover_app_token = $${paramIndex++}`);
       values.push(settings.pushover_app_token);
     }
+    if (settings.pushover_enabled !== undefined) {
+      fields.push(`pushover_enabled = $${paramIndex++}`);
+      values.push(settings.pushover_enabled);
+    }
 
     if (fields.length === 0) return null;
 
     values.push(id.toString());
     const result = await pool.query(
       `UPDATE users SET ${fields.join(', ')} WHERE id = $${paramIndex}
-       RETURNING telegram_bot_token, telegram_chat_id, discord_webhook_url, pushover_user_key, pushover_app_token`,
+       RETURNING telegram_bot_token, telegram_chat_id, COALESCE(telegram_enabled, true) as telegram_enabled,
+                 discord_webhook_url, COALESCE(discord_enabled, true) as discord_enabled,
+                 pushover_user_key, pushover_app_token, COALESCE(pushover_enabled, true) as pushover_enabled`,
       values
     );
     return result.rows[0] || null;
