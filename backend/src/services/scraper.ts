@@ -607,28 +607,38 @@ const siteScrapers: SiteScraper[] = [
       let imageUrl: string | null = null;
       let stockStatus: StockStatus = 'unknown';
 
+      // Debug: Check page title and body length
+      const pageTitle = $('title').text();
+      const bodyLength = $('body').html()?.length || 0;
+      console.log(`[B&H] Page title: "${pageTitle}", body length: ${bodyLength}`);
+
       // Try to get data from JSON-LD first
       try {
         const scripts = $('script[type="application/ld+json"]');
+        console.log(`[B&H] Found ${scripts.length} JSON-LD scripts`);
         scripts.each((_i, script) => {
           const content = $(script).html();
           if (!content) return;
           try {
             const data = JSON.parse(content);
+            console.log(`[B&H] JSON-LD type: ${data['@type']}`);
             if (data['@type'] === 'Product' || data.offers) {
               if (data.name && !name) {
                 name = data.name;
+                console.log(`[B&H] Found name: ${name}`);
               }
               if (data.image && !imageUrl) {
                 imageUrl = Array.isArray(data.image) ? data.image[0] : data.image;
               }
               if (data.offers && !price) {
                 const offer = Array.isArray(data.offers) ? data.offers[0] : data.offers;
+                console.log(`[B&H] Offer data: ${JSON.stringify(offer).slice(0, 200)}`);
                 if (offer.price) {
                   price = {
                     price: parseFloat(String(offer.price)),
                     currency: offer.priceCurrency || 'USD',
                   };
+                  console.log(`[B&H] Found price from JSON-LD: ${price.price}`);
                 }
                 // Check availability from JSON-LD
                 if (offer.availability) {
@@ -651,6 +661,7 @@ const siteScrapers: SiteScraper[] = [
 
       // Fallback to HTML selectors
       if (!price) {
+        console.log(`[B&H] No price from JSON-LD, trying HTML selectors`);
         const priceSelectors = [
           '[data-selenium="pricingPrice"]',
           '[data-selenium="uppedDecimalPriceFirst"]',
@@ -661,10 +672,15 @@ const siteScrapers: SiteScraper[] = [
 
         for (const selector of priceSelectors) {
           const el = $(selector).first();
+          console.log(`[B&H] Selector "${selector}": found ${el.length} elements`);
           if (el.length) {
             const text = el.text().trim();
+            console.log(`[B&H] Element text: "${text.slice(0, 100)}"`);
             price = parsePrice(text);
-            if (price) break;
+            if (price) {
+              console.log(`[B&H] Parsed price: ${price.price}`);
+              break;
+            }
           }
         }
       }
@@ -706,6 +722,7 @@ const siteScrapers: SiteScraper[] = [
         }
       }
 
+      console.log(`[B&H] Final result - name: ${name?.slice(0, 50)}, price: ${price?.price}, stock: ${stockStatus}`);
       return { name, price, imageUrl, stockStatus };
     },
   },
