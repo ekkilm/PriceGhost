@@ -48,6 +48,20 @@ async function runMigrations() {
         END IF;
       END $$;
     `);
+
+    // Create stock_status_history table if it doesn't exist
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS stock_status_history (
+        id SERIAL PRIMARY KEY,
+        product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+        status VARCHAR(20) NOT NULL,
+        changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_stock_history_product_date
+        ON stock_status_history(product_id, changed_at);
+    `);
+
     console.log('Database migrations completed');
   } catch (error) {
     console.error('Migration error:', error);

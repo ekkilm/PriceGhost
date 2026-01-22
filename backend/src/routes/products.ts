@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
-import { productQueries, priceHistoryQueries } from '../models';
+import { productQueries, priceHistoryQueries, stockStatusHistoryQueries } from '../models';
 import { scrapeProduct } from '../services/scraper';
 
 const router = Router();
@@ -67,6 +67,11 @@ router.post('/', async (req: AuthRequest, res: Response) => {
         scrapedData.price.price,
         scrapedData.price.currency
       );
+    }
+
+    // Record initial stock status
+    if (scrapedData.stockStatus !== 'unknown') {
+      await stockStatusHistoryQueries.recordChange(product.id, scrapedData.stockStatus);
     }
 
     // Update last_checked timestamp and schedule next check

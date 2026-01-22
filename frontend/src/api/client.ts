@@ -122,6 +122,31 @@ export const pricesApi = {
     ),
 };
 
+// Stock Status History API
+export interface StockStatusHistoryEntry {
+  id: number;
+  product_id: number;
+  status: StockStatus;
+  changed_at: string;
+}
+
+export interface StockStatusStats {
+  availability_percent: number;
+  outage_count: number;
+  avg_outage_days: number | null;
+  longest_outage_days: number | null;
+  current_status: StockStatus;
+  days_in_current_status: number;
+}
+
+export const stockHistoryApi = {
+  getHistory: (productId: number, days?: number) =>
+    api.get<{ history: StockStatusHistoryEntry[]; stats: StockStatusStats | null }>(
+      `/products/${productId}/stock-history`,
+      { params: days ? { days } : undefined }
+    ),
+};
+
 // Settings API
 export interface NotificationSettings {
   telegram_configured: boolean;

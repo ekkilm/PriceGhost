@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { productQueries, priceHistoryQueries, userQueries } from '../models';
+import { productQueries, priceHistoryQueries, userQueries, stockStatusHistoryQueries } from '../models';
 import { scrapeProduct } from './scraper';
 import { sendNotifications, NotificationPayload } from './notifications';
 
@@ -29,9 +29,13 @@ async function checkPrices(): Promise<void> {
         const wasOutOfStock = product.stock_status === 'out_of_stock';
         const nowInStock = scrapedData.stockStatus === 'in_stock';
 
-        // Update stock status
+        // Update stock status and record to history
         if (scrapedData.stockStatus !== product.stock_status) {
           await productQueries.updateStockStatus(product.id, scrapedData.stockStatus);
+
+          // Record the status change in history
+          await stockStatusHistoryQueries.recordChange(product.id, scrapedData.stockStatus);
+
           console.log(
             `Stock status changed for product ${product.id}: ${product.stock_status} -> ${scrapedData.stockStatus}`
           );

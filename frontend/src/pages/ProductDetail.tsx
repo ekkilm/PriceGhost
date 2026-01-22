@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import PriceChart from '../components/PriceChart';
+import StockTimeline from '../components/StockTimeline';
 import { useToast } from '../context/ToastContext';
 import {
   productsApi,
@@ -520,6 +521,8 @@ export default function ProductDetail() {
         currency={product.currency || 'USD'}
         onRangeChange={handleRangeChange}
       />
+
+      <StockTimeline productId={productId} days={30} />
 
       {notificationSettings && (
         (notificationSettings.telegram_configured && notificationSettings.telegram_enabled) ||
