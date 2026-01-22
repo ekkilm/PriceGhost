@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Product } from '../api/client';
 import Sparkline from './Sparkline';
@@ -14,6 +14,57 @@ interface ProductCardProps {
 
 export default function ProductCard({ product, onDelete, onRefresh, isSelected, onSelect, showCheckbox }: ProductCardProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [timeRemaining, setTimeRemaining] = useState('');
+  const [isComplete, setIsComplete] = useState(false);
+
+  // Calculate progress and time remaining
+  useEffect(() => {
+    const calculateProgress = () => {
+      if (!product.last_checked) {
+        setProgress(100);
+        setTimeRemaining('Soon');
+        return;
+      }
+
+      const lastChecked = new Date(product.last_checked).getTime();
+      const intervalMs = product.refresh_interval * 1000;
+      const nextCheck = lastChecked + intervalMs;
+      const now = Date.now();
+      const elapsed = now - lastChecked;
+      const remaining = nextCheck - now;
+
+      const progressPercent = Math.min((elapsed / intervalMs) * 100, 100);
+      setProgress(progressPercent);
+
+      // Trigger complete animation when reaching 100%
+      if (progressPercent >= 100 && !isComplete) {
+        setIsComplete(true);
+        setTimeout(() => setIsComplete(false), 1500);
+      }
+
+      // Format time remaining
+      if (remaining <= 0) {
+        setTimeRemaining('Soon');
+      } else {
+        const seconds = Math.floor(remaining / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+
+        if (hours > 0) {
+          setTimeRemaining(`${hours}h ${minutes % 60}m`);
+        } else if (minutes > 0) {
+          setTimeRemaining(`${minutes}m ${seconds % 60}s`);
+        } else {
+          setTimeRemaining(`${seconds}s`);
+        }
+      }
+    };
+
+    calculateProgress();
+    const interval = setInterval(calculateProgress, 1000);
+    return () => clearInterval(interval);
+  }, [product.last_checked, product.refresh_interval, isComplete]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -67,14 +118,17 @@ export default function ProductCard({ product, onDelete, onRefresh, isSelected, 
     <div className={`product-list-item ${isOutOfStock ? 'out-of-stock' : ''} ${isSelected ? 'selected' : ''}`}>
       <style>{`
         .product-list-item {
+          position: relative;
           background: var(--surface);
           border-radius: 0.75rem;
           box-shadow: var(--shadow);
           padding: 1rem;
+          padding-bottom: 1.25rem;
           display: flex;
           align-items: center;
           gap: 1rem;
           transition: box-shadow 0.2s, transform 0.2s;
+          overflow: hidden;
         }
 
         .product-list-item:hover {
@@ -324,6 +378,63 @@ export default function ProductCard({ product, onDelete, onRefresh, isSelected, 
             flex: 1;
           }
         }
+
+        .product-progress-container {
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          height: 3px;
+          background: var(--border);
+          border-radius: 0 0 0.75rem 0.75rem;
+          overflow: hidden;
+        }
+
+        .product-progress-bar {
+          height: 100%;
+          background: linear-gradient(90deg, #3b82f6, #06b6d4, #10b981);
+          border-radius: 0 0 0 0.75rem;
+          transition: width 0.3s ease-out;
+          position: relative;
+        }
+
+        .product-progress-bar::after {
+          content: '';
+          position: absolute;
+          right: 0;
+          top: -2px;
+          bottom: -2px;
+          width: 20px;
+          background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6));
+          filter: blur(3px);
+          border-radius: 50%;
+        }
+
+        .product-progress-bar.complete {
+          animation: progress-pulse 0.75s ease-in-out 2;
+        }
+
+        @keyframes progress-pulse {
+          0%, 100% {
+            box-shadow: 0 0 5px rgba(16, 185, 129, 0.5);
+          }
+          50% {
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.8), 0 0 30px rgba(16, 185, 129, 0.4);
+          }
+        }
+
+        .product-time-remaining {
+          position: absolute;
+          bottom: 8px;
+          right: 8px;
+          font-size: 0.625rem;
+          color: var(--text-muted);
+          background: var(--surface);
+          padding: 0.125rem 0.375rem;
+          border-radius: 0.25rem;
+          opacity: 0.8;
+          font-variant-numeric: tabular-nums;
+        }
       `}</style>
 
       {showCheckbox && (
@@ -460,6 +571,14 @@ export default function ProductCard({ product, onDelete, onRefresh, isSelected, 
           </svg>
         </button>
       </div>
+
+      <div className="product-progress-container">
+        <div
+          className={`product-progress-bar ${isComplete ? 'complete' : ''}`}
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+      <span className="product-time-remaining">{timeRemaining}</span>
     </div>
   );
 }
