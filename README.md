@@ -4,6 +4,39 @@ A self-hosted price tracking application that monitors product prices from any w
 
 <img width="1609" height="1094" alt="image" src="https://github.com/user-attachments/assets/311f410c-170c-4f0c-81e3-3ba7e0141fa7" />
 
+---
+
+## Built by AI. Built Right.
+
+This entire application was developed collaboratively with [Claude](https://claude.ai) (Anthropic's AI assistant) using [Claude Code](https://claude.ai/claude-code). Every feature, from database migrations to responsive UI components, was crafted through iterative conversation and careful code generation.
+
+**This is not "AI slop."** This is a fully functional, production-ready application with:
+- Proper error handling throughout
+- Clean, maintainable TypeScript codebase
+- Real security practices (JWT auth, bcrypt hashing, input validation)
+- Thoughtful UX with toast notifications, loading states, and responsive design
+- Comprehensive API with consistent patterns
+
+Built with Claude Opus 4.5.
+
+---
+
+## Strongly Recommended: Enable AI Extraction
+
+While PriceGhost includes multiple scraping strategies (JSON-LD, meta tags, CSS selectors, pattern matching, and headless browser), **we highly recommend enabling AI-powered extraction** for the best results.
+
+Modern e-commerce sites use increasingly complex layouts, dynamic pricing, and anti-scraping measures. AI extraction serves as an intelligent fallback that can understand page context and reliably extract prices even from difficult sites.
+
+**To enable:**
+1. Get an API key from [Anthropic](https://console.anthropic.com) (Claude) or [OpenAI](https://platform.openai.com)
+2. Go to Settings > AI Extraction
+3. Enable AI extraction and enter your key
+4. That's it! AI will automatically kick in when standard scraping fails
+
+The cost is minimal (fractions of a cent per extraction) and dramatically improves success rates.
+
+---
+
 ## Features
 
 ### Price Tracking
@@ -14,6 +47,8 @@ A self-hosted price tracking application that monitors product prices from any w
 - **Price history charts** - Interactive visualization with customizable date ranges (7d, 30d, 90d, all time)
 - **7-day sparklines** - Quick price trend overview on the dashboard
 - **Configurable check intervals** - From 5 minutes to 24 hours per product
+- **Live countdown timers** - See exactly when each product will be checked next
+- **Progress bar visualization** - Animated gradient progress bars showing time until next check
 
 ### Notifications
 - **Price drop alerts** - Set a threshold (e.g., "notify when it drops $10+")
@@ -21,23 +56,28 @@ A self-hosted price tracking application that monitors product prices from any w
 - **Back-in-stock alerts** - Get notified when out-of-stock items become available
 - **Telegram** - Get alerts via Telegram bot
 - **Discord** - Send alerts to any Discord channel via webhooks
+- **Pushover** - Native Pushover support for mobile push notifications
+- **Per-channel toggles** - Enable/disable each notification channel independently
+- **Test notifications** - Send test alerts to verify your setup
 
 ### Stock Tracking
 - **Out-of-stock detection** - Automatically detects when products are unavailable
 - **Visual indicators** - Clear badges showing stock status on dashboard and detail pages
 - **Stock change notifications** - Get notified when items come back in stock
 
+### User Experience
+- **Dark/Light mode** - Automatic system theme detection with manual toggle
+- **Toast notifications** - Visual feedback for all actions
+- **Responsive design** - Works on desktop and mobile
+- **Manual refresh** - Force an immediate price check with one click
+- **Price statistics** - See min, max, and average prices for each product
+- **Real-time countdowns** - Animated progress bars and timers for each product
+
 ### User Management
 - **Multi-user support** - Each user has their own products and settings
 - **Admin panel** - Manage users, create accounts, toggle admin privileges
 - **Registration control** - Enable/disable public registration
 - **Profile management** - Update display name and change password
-
-### User Experience
-- **Toast notifications** - Visual feedback for all actions
-- **Responsive design** - Works on desktop and mobile
-- **Manual refresh** - Force an immediate price check with one click
-- **Price statistics** - See min, max, and average prices for each product
 
 ## Tech Stack
 
@@ -47,7 +87,7 @@ A self-hosted price tracking application that monitors product prices from any w
 | **Backend** | Node.js, Express, TypeScript |
 | **Database** | PostgreSQL |
 | **Scraping** | Cheerio, Puppeteer (with stealth plugin) |
-| **AI Extraction** | Anthropic Claude, OpenAI GPT (optional) |
+| **AI Extraction** | Anthropic Claude, OpenAI GPT (optional but recommended) |
 | **Charts** | Recharts |
 | **Auth** | JWT + bcrypt |
 | **Scheduling** | node-cron |
@@ -116,22 +156,34 @@ npm run dev
 1. Create a bot via [@BotFather](https://t.me/botfather) on Telegram
 2. Get your Chat ID from [@userinfobot](https://t.me/userinfobot)
 3. Enter both in Settings > Notifications
+4. Use the toggle to enable/disable without losing your configuration
 
 #### Discord
 1. In your Discord server: Server Settings > Integrations > Webhooks
 2. Create a new webhook and copy the URL
 3. Enter the URL in Settings > Notifications
+4. Use the toggle to enable/disable without losing your configuration
 
-### AI Extraction (Optional)
+#### Pushover
+1. Create an account at [pushover.net](https://pushover.net)
+2. Note your User Key from the dashboard
+3. Create an application at [pushover.net/apps](https://pushover.net/apps/build) to get an API Token
+4. Enter both in Settings > Notifications
+5. Use the toggle to enable/disable without losing your configuration
 
-For improved compatibility with difficult sites:
+### AI Extraction Setup (Highly Recommended)
 
-1. Go to Settings > AI Settings
+For dramatically improved compatibility with difficult sites:
+
+1. Go to Settings > AI Extraction
 2. Enable AI-powered extraction
-3. Choose your provider (Anthropic or OpenAI)
+3. Choose your provider:
+   - **Anthropic (Claude)** - Get key from [console.anthropic.com](https://console.anthropic.com)
+   - **OpenAI (GPT)** - Get key from [platform.openai.com](https://platform.openai.com/api-keys)
 4. Enter your API key
+5. Use "Test Extraction" to verify it works
 
-The AI will automatically be used as a fallback when standard scraping fails to extract a price.
+The AI automatically activates when standard scraping fails to extract a price, providing a reliable fallback.
 
 ## API Reference
 
@@ -161,9 +213,10 @@ The AI will automatically be used as a fallback when standard scraping fails to 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/settings/notifications` | Get notification config |
-| PUT | `/api/settings/notifications` | Update Telegram/Discord settings |
+| PUT | `/api/settings/notifications` | Update notification settings |
 | POST | `/api/settings/notifications/test/telegram` | Send test Telegram notification |
 | POST | `/api/settings/notifications/test/discord` | Send test Discord notification |
+| POST | `/api/settings/notifications/test/pushover` | Send test Pushover notification |
 | GET | `/api/settings/ai` | Get AI extraction settings |
 | PUT | `/api/settings/ai` | Update AI settings |
 | POST | `/api/settings/ai/test` | Test AI extraction on a URL |
@@ -211,16 +264,11 @@ PriceGhost/
 
 To avoid getting blocked by retailers:
 
-- **Staggered checking** - Products are checked at randomized intervals with jitter
+- **Staggered checking** - Products are checked at randomized intervals with ±5 minute jitter
 - **Request delays** - 2-5 second random delay between checking different products
 - **Reasonable intervals** - Default 1 hour; use longer intervals if tracking many products
 - **Browser headers** - Requests use standard browser User-Agent strings
-
-## About This Project
-
-This project was built collaboratively with [Claude](https://claude.ai) (Anthropic's AI assistant) using [Claude Code](https://claude.ai/claude-code). Every feature was developed through iterative conversation and code generation.
-
-Built with Claude Opus 4.5.
+- **5-minute warning** - UI warns when selecting aggressive check intervals
 
 ## License
 
