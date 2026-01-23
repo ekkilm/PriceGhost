@@ -822,6 +822,63 @@ export async function scrapeProduct(url: string, userId?: number): Promise<Scrap
       result.imageUrl = $('meta[property="og:image"]').attr('content') || null;
     }
 
+    // If no price found and we haven't tried browser yet, try Puppeteer
+    // This handles JavaScript-rendered prices (Magento, React, Vue, etc.)
+    if (!result.price && !usedBrowser) {
+      console.log(`[Scraper] No price found in static HTML for ${url}, trying headless browser...`);
+      try {
+        html = await scrapeWithBrowser(url);
+        usedBrowser = true;
+        const $browser = load(html);
+
+        // Re-try extraction with browser-rendered HTML
+        // Try site-specific scraper
+        const siteScraper = siteScrapers.find((s) => s.match(url));
+        if (siteScraper) {
+          const siteResult = siteScraper.scrape($browser, url);
+          if (!result.name && siteResult.name) result.name = siteResult.name;
+          if (!result.price && siteResult.price) result.price = siteResult.price;
+          if (!result.imageUrl && siteResult.imageUrl) result.imageUrl = siteResult.imageUrl;
+          if (result.stockStatus === 'unknown' && siteResult.stockStatus) {
+            result.stockStatus = siteResult.stockStatus;
+          }
+        }
+
+        // Try JSON-LD from browser-rendered HTML
+        if (!result.price) {
+          const jsonLdData = extractJsonLd($browser);
+          if (jsonLdData) {
+            if (!result.name && jsonLdData.name) result.name = jsonLdData.name;
+            if (!result.price && jsonLdData.price) result.price = jsonLdData.price;
+            if (!result.imageUrl && jsonLdData.image) result.imageUrl = jsonLdData.image;
+            if (result.stockStatus === 'unknown' && jsonLdData.stockStatus) {
+              result.stockStatus = jsonLdData.stockStatus;
+            }
+          }
+        }
+
+        // Try generic extraction from browser-rendered HTML
+        if (!result.price) {
+          result.price = extractGenericPrice($browser);
+        }
+        if (!result.name) {
+          result.name = extractGenericName($browser);
+        }
+        if (!result.imageUrl) {
+          result.imageUrl = extractGenericImage($browser, url);
+        }
+        if (result.stockStatus === 'unknown') {
+          result.stockStatus = extractGenericStockStatus($browser);
+        }
+
+        if (result.price) {
+          console.log(`[Scraper] Successfully extracted price ${result.price.price} ${result.price.currency} using headless browser`);
+        }
+      } catch (browserError) {
+        console.error(`[Scraper] Browser fallback failed for ${url}:`, browserError);
+      }
+    }
+
     // If we have a price and userId is provided, try AI verification
     if (result.price && userId && html) {
       try {
