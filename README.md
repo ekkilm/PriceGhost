@@ -1,8 +1,6 @@
 <p align="center">
-  <img src="frontend/public/icon.svg" alt="PriceGhost Logo" width="120" height="120">
+  <img src="assets/header.svg" alt="PriceGhost" width="500">
 </p>
-
-<h1 align="center">PriceGhost</h1>
 
 <p align="center">
   <strong>A self-hosted price tracking application that monitors product prices from any website.</strong><br>
