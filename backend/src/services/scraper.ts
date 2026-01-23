@@ -742,9 +742,36 @@ const siteScrapers: SiteScraper[] = [
                  $('.fotorama__stage img').first().attr('src') ||
                  null;
 
+      // Stock status detection for Magento 2
+      let stockStatus: StockStatus = 'unknown';
+
+      // Check for Magento's stock status elements
+      const stockElement = $('.product-info-stock-sku .stock').first();
+      const stockText = stockElement.text().toLowerCase();
+      const stockClass = stockElement.attr('class')?.toLowerCase() || '';
+
+      // Magento uses "available" class for in-stock items
+      if (stockClass.includes('available') || stockText.includes('in stock')) {
+        stockStatus = 'in_stock';
+      } else if (stockClass.includes('unavailable') || stockText.includes('out of stock')) {
+        stockStatus = 'out_of_stock';
+      }
+
+      // Also check for add to cart button as backup
+      if (stockStatus === 'unknown') {
+        const addToCartBtn = $('#product-addtocart-button, button.tocart, button[title="Add to Cart"], button[title="Add to Basket"]').length > 0;
+        const outOfStockMsg = $('.out-of-stock, .unavailable, [class*="outofstock"]').length > 0;
+
+        if (addToCartBtn && !outOfStockMsg) {
+          stockStatus = 'in_stock';
+        } else if (outOfStockMsg) {
+          stockStatus = 'out_of_stock';
+        }
+      }
+
       // Only return if we found a price (indicates it's likely a Magento site)
       if (price) {
-        return { name, price, imageUrl };
+        return { name, price, imageUrl, stockStatus };
       }
       return {};
     },
@@ -1259,13 +1286,11 @@ function extractGenericStockStatus($: CheerioAPI): StockStatus {
 
   // Check for pre-order / coming soon indicators BEFORE checking add to cart
   // Some sites show a "Pre-order" button that looks like add to cart
+  // NOTE: Be careful with generic phrases - "available in" matches "available in stock"!
   const preOrderComingSoonPhrases = [
     'coming soon',
-    'coming in',
     'available soon',
-    'available in',
     'arriving soon',
-    'arriving in',
     'releases on',
     'release date',
     'expected release',
@@ -1284,25 +1309,53 @@ function extractGenericStockStatus($: CheerioAPI): StockStatus {
     'join waitlist',
     'not yet released',
     'not yet available',
-    'coming this',
-    'coming next',
+    // Specific future availability phrases (avoid generic "available in" which matches "available in stock")
     'available starting',
+    'available from',  // Usually followed by a date
+    'ships in',        // Usually indicates future shipping
+    'expected to ship',
+    'estimated arrival',
   ];
 
-  for (const phrase of preOrderComingSoonPhrases) {
-    if (textToCheck.includes(phrase)) {
-      // Double check it's not just a section about pre-orders in general
-      // by looking for the phrase near price/product context
-      const phraseIndex = textToCheck.indexOf(phrase);
-      const contextStart = Math.max(0, phraseIndex - 200);
-      const contextEnd = Math.min(textToCheck.length, phraseIndex + 200);
-      const context = textToCheck.substring(contextStart, contextEnd);
+  // Phrases that indicate the product is NOT coming soon (should not trigger out of stock)
+  const inStockPhrases = [
+    'in stock',
+    'add to cart',
+    'add to basket',
+    'buy now',
+    'available now',
+    'ships today',
+    'ships immediately',
+    'ready to ship',
+  ];
 
-      // If the context mentions price, buy, cart, or product, it's likely about this product
-      if (context.includes('$') || context.includes('price') ||
-          context.includes('buy') || context.includes('cart') ||
-          context.includes('order') || context.includes('purchase')) {
-        return 'out_of_stock';
+  // First, check if the page has strong in-stock indicators
+  // If so, don't let pre-order phrase matching override it
+  let hasInStockIndicator = false;
+  for (const phrase of inStockPhrases) {
+    if (textToCheck.includes(phrase)) {
+      hasInStockIndicator = true;
+      break;
+    }
+  }
+
+  // Only check for pre-order/coming soon if we don't have a clear in-stock indicator
+  if (!hasInStockIndicator) {
+    for (const phrase of preOrderComingSoonPhrases) {
+      if (textToCheck.includes(phrase)) {
+        // Double check it's not just a section about pre-orders in general
+        // by looking for the phrase near price/product context
+        const phraseIndex = textToCheck.indexOf(phrase);
+        const contextStart = Math.max(0, phraseIndex - 200);
+        const contextEnd = Math.min(textToCheck.length, phraseIndex + 200);
+        const context = textToCheck.substring(contextStart, contextEnd);
+
+        // If the context mentions price, buy, cart, or product, it's likely about this product
+        if (context.includes('$') || context.includes('price') ||
+            context.includes('buy') || context.includes('cart') ||
+            context.includes('order') || context.includes('purchase')) {
+          return 'out_of_stock';
+        }
       }
     }
   }
