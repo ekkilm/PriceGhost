@@ -81,23 +81,25 @@ export default function Settings() {
       setProfile(profileRes.data);
       setProfileName(profileRes.data.name || '');
       setNotificationSettings(notificationsRes.data);
-      if (notificationsRes.data.telegram_chat_id) {
-        setTelegramChatId(notificationsRes.data.telegram_chat_id);
-      }
+      // Populate notification fields with actual values
+      setTelegramBotToken(notificationsRes.data.telegram_bot_token || '');
+      setTelegramChatId(notificationsRes.data.telegram_chat_id || '');
       setTelegramEnabled(notificationsRes.data.telegram_enabled ?? true);
+      setDiscordWebhookUrl(notificationsRes.data.discord_webhook_url || '');
       setDiscordEnabled(notificationsRes.data.discord_enabled ?? true);
+      setPushoverUserKey(notificationsRes.data.pushover_user_key || '');
+      setPushoverAppToken(notificationsRes.data.pushover_app_token || '');
       setPushoverEnabled(notificationsRes.data.pushover_enabled ?? true);
+      // Populate AI fields with actual values
       setAISettings(aiRes.data);
       setAIEnabled(aiRes.data.ai_enabled);
       if (aiRes.data.ai_provider) {
         setAIProvider(aiRes.data.ai_provider);
       }
-      if (aiRes.data.ollama_base_url) {
-        setOllamaBaseUrl(aiRes.data.ollama_base_url);
-      }
-      if (aiRes.data.ollama_model) {
-        setOllamaModel(aiRes.data.ollama_model);
-      }
+      setAnthropicApiKey(aiRes.data.anthropic_api_key || '');
+      setOpenaiApiKey(aiRes.data.openai_api_key || '');
+      setOllamaBaseUrl(aiRes.data.ollama_base_url || '');
+      setOllamaModel(aiRes.data.ollama_model || '');
     } catch {
       setError('Failed to load settings');
     } finally {
@@ -958,8 +960,8 @@ export default function Settings() {
                 <div className="settings-section-header">
                   <span className="settings-section-icon">📱</span>
                   <h2 className="settings-section-title">Telegram Notifications</h2>
-                  <span className={`settings-section-status ${notificationSettings?.telegram_configured ? 'configured' : 'not-configured'}`}>
-                    {notificationSettings?.telegram_configured ? 'Configured' : 'Not configured'}
+                  <span className={`settings-section-status ${notificationSettings?.telegram_bot_token && notificationSettings?.telegram_chat_id ? 'configured' : 'not-configured'}`}>
+                    {notificationSettings?.telegram_bot_token && notificationSettings?.telegram_chat_id ? 'Configured' : 'Not configured'}
                   </span>
                 </div>
                 <p className="settings-section-description">
@@ -967,7 +969,7 @@ export default function Settings() {
                   and get your chat ID.
                 </p>
 
-                {notificationSettings?.telegram_configured && (
+                {notificationSettings?.telegram_bot_token && notificationSettings?.telegram_chat_id && (
                   <div className="settings-toggle">
                     <div className="settings-toggle-label">
                       <span className="settings-toggle-title">Enable Telegram Notifications</span>
@@ -987,7 +989,7 @@ export default function Settings() {
                   <PasswordInput
                     value={telegramBotToken}
                     onChange={(e) => setTelegramBotToken(e.target.value)}
-                    placeholder={notificationSettings?.telegram_configured ? 'Saved - enter new value to replace' : 'Enter your bot token'}
+                    placeholder="Enter your bot token"
                   />
                   <p className="hint">Create a bot via @BotFather on Telegram to get a token</p>
                 </div>
@@ -1011,7 +1013,7 @@ export default function Settings() {
                   >
                     {isSavingNotifications ? 'Saving...' : 'Save Telegram Settings'}
                   </button>
-                  {notificationSettings?.telegram_configured && (
+                  {notificationSettings?.telegram_bot_token && notificationSettings?.telegram_chat_id && (
                     <button
                       className="btn btn-secondary"
                       onClick={handleTestTelegram}
@@ -1027,8 +1029,8 @@ export default function Settings() {
                 <div className="settings-section-header">
                   <span className="settings-section-icon">💬</span>
                   <h2 className="settings-section-title">Discord Notifications</h2>
-                  <span className={`settings-section-status ${notificationSettings?.discord_configured ? 'configured' : 'not-configured'}`}>
-                    {notificationSettings?.discord_configured ? 'Configured' : 'Not configured'}
+                  <span className={`settings-section-status ${notificationSettings?.discord_webhook_url ? 'configured' : 'not-configured'}`}>
+                    {notificationSettings?.discord_webhook_url ? 'Configured' : 'Not configured'}
                   </span>
                 </div>
                 <p className="settings-section-description">
@@ -1036,7 +1038,7 @@ export default function Settings() {
                   Discord server settings.
                 </p>
 
-                {notificationSettings?.discord_configured && (
+                {notificationSettings?.discord_webhook_url && (
                   <div className="settings-toggle">
                     <div className="settings-toggle-label">
                       <span className="settings-toggle-title">Enable Discord Notifications</span>
@@ -1056,7 +1058,7 @@ export default function Settings() {
                   <PasswordInput
                     value={discordWebhookUrl}
                     onChange={(e) => setDiscordWebhookUrl(e.target.value)}
-                    placeholder={notificationSettings?.discord_configured ? 'Saved - enter new value to replace' : 'https://discord.com/api/webhooks/...'}
+                    placeholder="https://discord.com/api/webhooks/..."
                   />
                   <p className="hint">Server Settings → Integrations → Webhooks → New Webhook</p>
                 </div>
@@ -1069,7 +1071,7 @@ export default function Settings() {
                   >
                     {isSavingNotifications ? 'Saving...' : 'Save Discord Settings'}
                   </button>
-                  {notificationSettings?.discord_configured && (
+                  {notificationSettings?.discord_webhook_url && (
                     <button
                       className="btn btn-secondary"
                       onClick={handleTestDiscord}
@@ -1085,8 +1087,8 @@ export default function Settings() {
                 <div className="settings-section-header">
                   <span className="settings-section-icon">🔔</span>
                   <h2 className="settings-section-title">Pushover Notifications</h2>
-                  <span className={`settings-section-status ${notificationSettings?.pushover_configured ? 'configured' : 'not-configured'}`}>
-                    {notificationSettings?.pushover_configured ? 'Configured' : 'Not configured'}
+                  <span className={`settings-section-status ${notificationSettings?.pushover_user_key && notificationSettings?.pushover_app_token ? 'configured' : 'not-configured'}`}>
+                    {notificationSettings?.pushover_user_key && notificationSettings?.pushover_app_token ? 'Configured' : 'Not configured'}
                   </span>
                 </div>
                 <p className="settings-section-description">
@@ -1094,7 +1096,7 @@ export default function Settings() {
                   and an application to get your keys.
                 </p>
 
-                {notificationSettings?.pushover_configured && (
+                {notificationSettings?.pushover_user_key && notificationSettings?.pushover_app_token && (
                   <div className="settings-toggle">
                     <div className="settings-toggle-label">
                       <span className="settings-toggle-title">Enable Pushover Notifications</span>
@@ -1114,7 +1116,7 @@ export default function Settings() {
                   <PasswordInput
                     value={pushoverUserKey}
                     onChange={(e) => setPushoverUserKey(e.target.value)}
-                    placeholder={notificationSettings?.pushover_configured ? 'Saved - enter new value to replace' : 'Enter your user key'}
+                    placeholder="Enter your user key"
                   />
                   <p className="hint">Find your User Key on the Pushover dashboard after logging in</p>
                 </div>
@@ -1124,7 +1126,7 @@ export default function Settings() {
                   <PasswordInput
                     value={pushoverAppToken}
                     onChange={(e) => setPushoverAppToken(e.target.value)}
-                    placeholder={notificationSettings?.pushover_configured ? 'Saved - enter new value to replace' : 'Enter your app token'}
+                    placeholder="Enter your app token"
                   />
                   <p className="hint">Create an application at pushover.net/apps to get an API token</p>
                 </div>
@@ -1137,7 +1139,7 @@ export default function Settings() {
                   >
                     {isSavingNotifications ? 'Saving...' : 'Save Pushover Settings'}
                   </button>
-                  {notificationSettings?.pushover_configured && (
+                  {notificationSettings?.pushover_user_key && notificationSettings?.pushover_app_token && (
                     <button
                       className="btn btn-secondary"
                       onClick={handleTestPushover}
@@ -1208,15 +1210,14 @@ export default function Settings() {
                         <PasswordInput
                           value={anthropicApiKey}
                           onChange={(e) => setAnthropicApiKey(e.target.value)}
-                          placeholder={aiSettings?.anthropic_configured ? 'Saved - enter new value to replace' : 'sk-ant-...'}
+                          placeholder="sk-ant-..."
                         />
                         <p className="hint">
                           Get your API key from{' '}
                           <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer">
                             console.anthropic.com
                           </a>
-                          {aiSettings?.anthropic_configured && ' (key already saved)'}
-                        </p>
+                                                  </p>
                       </div>
                     )}
 
@@ -1226,15 +1227,14 @@ export default function Settings() {
                         <PasswordInput
                           value={openaiApiKey}
                           onChange={(e) => setOpenaiApiKey(e.target.value)}
-                          placeholder={aiSettings?.openai_configured ? 'Saved - enter new value to replace' : 'sk-...'}
+                          placeholder="sk-..."
                         />
                         <p className="hint">
                           Get your API key from{' '}
                           <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">
                             platform.openai.com
                           </a>
-                          {aiSettings?.openai_configured && ' (key already saved)'}
-                        </p>
+                                                  </p>
                       </div>
                     )}
 
@@ -1298,7 +1298,7 @@ export default function Settings() {
                               ? 'Select from available models or test connection to refresh list'
                               : 'Enter model name or test connection to see available models'
                             }
-                            {aiSettings?.ollama_configured && ` (currently: ${aiSettings.ollama_model})`}
+                            {aiSettings?.ollama_base_url && aiSettings?.ollama_model && ` (currently: ${aiSettings.ollama_model})`}
                           </p>
                         </div>
                       </>
@@ -1317,7 +1317,7 @@ export default function Settings() {
                 </div>
               </div>
 
-              {aiSettings?.ai_enabled && (aiSettings.anthropic_configured || aiSettings.openai_configured || aiSettings.ollama_configured) && (
+              {aiSettings?.ai_enabled && (aiSettings.anthropic_api_key || aiSettings.openai_api_key || (aiSettings.ollama_base_url && aiSettings.ollama_model)) && (
                 <div className="settings-section">
                   <div className="settings-section-header">
                     <span className="settings-section-icon">🧪</span>

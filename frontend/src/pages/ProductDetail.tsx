@@ -525,9 +525,9 @@ export default function ProductDetail() {
       <StockTimeline productId={productId} days={30} />
 
       {notificationSettings && (
-        (notificationSettings.telegram_configured && notificationSettings.telegram_enabled) ||
-        (notificationSettings.discord_configured && notificationSettings.discord_enabled) ||
-        (notificationSettings.pushover_configured && notificationSettings.pushover_enabled)
+        ((notificationSettings.telegram_bot_token && notificationSettings.telegram_chat_id) && notificationSettings.telegram_enabled) ||
+        (notificationSettings.discord_webhook_url && notificationSettings.discord_enabled) ||
+        ((notificationSettings.pushover_user_key && notificationSettings.pushover_app_token) && notificationSettings.pushover_enabled)
       ) && (
         <>
           <style>{`
@@ -676,13 +676,13 @@ export default function ProductDetail() {
               <span className="notification-settings-icon">🔔</span>
               <h2 className="notification-settings-title">Notification Settings</h2>
               <div className="notification-settings-channels">
-                {notificationSettings.telegram_configured && notificationSettings.telegram_enabled && (
+                {(notificationSettings.telegram_bot_token && notificationSettings.telegram_chat_id) && notificationSettings.telegram_enabled && (
                   <span className="notification-channel-badge">Telegram</span>
                 )}
-                {notificationSettings.discord_configured && notificationSettings.discord_enabled && (
+                {notificationSettings.discord_webhook_url && notificationSettings.discord_enabled && (
                   <span className="notification-channel-badge">Discord</span>
                 )}
-                {notificationSettings.pushover_configured && notificationSettings.pushover_enabled && (
+                {(notificationSettings.pushover_user_key && notificationSettings.pushover_app_token) && notificationSettings.pushover_enabled && (
                   <span className="notification-channel-badge">Pushover</span>
                 )}
               </div>

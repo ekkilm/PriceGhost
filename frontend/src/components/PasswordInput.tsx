@@ -4,24 +4,22 @@ interface PasswordInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>,
   // All standard input props are inherited
 }
 
-export default function PasswordInput({ style, value, ...props }: PasswordInputProps) {
+export default function PasswordInput({ style, ...props }: PasswordInputProps) {
   const [visible, setVisible] = useState(false);
-  const hasValue = value !== undefined && value !== null && String(value).length > 0;
 
   return (
     <div style={{ position: 'relative' }}>
       <input
         {...props}
-        value={value}
         type={visible ? 'text' : 'password'}
         style={{
           ...style,
           width: '100%',
-          paddingRight: hasValue ? '2.5rem' : '0.75rem',
+          paddingRight: '2.5rem',
           boxSizing: 'border-box',
         }}
       />
-      {hasValue && <button
+      <button
         type="button"
         onClick={(e) => {
           e.preventDefault();
@@ -79,7 +77,7 @@ export default function PasswordInput({ style, value, ...props }: PasswordInputP
             <circle cx="12" cy="12" r="3" />
           </svg>
         )}
-      </button>}
+      </button>
     </div>
   );
 }

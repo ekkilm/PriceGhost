@@ -149,12 +149,13 @@ export const stockHistoryApi = {
 
 // Settings API
 export interface NotificationSettings {
-  telegram_configured: boolean;
+  telegram_bot_token: string | null;
   telegram_chat_id: string | null;
   telegram_enabled: boolean;
-  discord_configured: boolean;
+  discord_webhook_url: string | null;
   discord_enabled: boolean;
-  pushover_configured: boolean;
+  pushover_user_key: string | null;
+  pushover_app_token: string | null;
   pushover_enabled: boolean;
 }
 
@@ -206,9 +207,8 @@ export const settingsApi = {
 export interface AISettings {
   ai_enabled: boolean;
   ai_provider: 'anthropic' | 'openai' | 'ollama' | null;
-  anthropic_configured: boolean;
-  openai_configured: boolean;
-  ollama_configured: boolean;
+  anthropic_api_key: string | null;
+  openai_api_key: string | null;
   ollama_base_url: string | null;
   ollama_model: string | null;
 }

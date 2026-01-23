@@ -18,14 +18,14 @@ router.get('/notifications', async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    // Don't expose full tokens, just indicate if they're set
     res.json({
-      telegram_configured: !!(settings.telegram_bot_token && settings.telegram_chat_id),
-      telegram_chat_id: settings.telegram_chat_id,
+      telegram_bot_token: settings.telegram_bot_token || null,
+      telegram_chat_id: settings.telegram_chat_id || null,
       telegram_enabled: settings.telegram_enabled ?? true,
-      discord_configured: !!settings.discord_webhook_url,
+      discord_webhook_url: settings.discord_webhook_url || null,
       discord_enabled: settings.discord_enabled ?? true,
-      pushover_configured: !!(settings.pushover_user_key && settings.pushover_app_token),
+      pushover_user_key: settings.pushover_user_key || null,
+      pushover_app_token: settings.pushover_app_token || null,
       pushover_enabled: settings.pushover_enabled ?? true,
     });
   } catch (error) {
@@ -66,12 +66,13 @@ router.put('/notifications', async (req: AuthRequest, res: Response) => {
     }
 
     res.json({
-      telegram_configured: !!(settings.telegram_bot_token && settings.telegram_chat_id),
-      telegram_chat_id: settings.telegram_chat_id,
+      telegram_bot_token: settings.telegram_bot_token || null,
+      telegram_chat_id: settings.telegram_chat_id || null,
       telegram_enabled: settings.telegram_enabled ?? true,
-      discord_configured: !!settings.discord_webhook_url,
+      discord_webhook_url: settings.discord_webhook_url || null,
       discord_enabled: settings.discord_enabled ?? true,
-      pushover_configured: !!(settings.pushover_user_key && settings.pushover_app_token),
+      pushover_user_key: settings.pushover_user_key || null,
+      pushover_app_token: settings.pushover_app_token || null,
       pushover_enabled: settings.pushover_enabled ?? true,
       message: 'Notification settings updated successfully',
     });
@@ -196,13 +197,11 @@ router.get('/ai', async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    // Don't expose full API keys, just indicate if they're set
     res.json({
       ai_enabled: settings.ai_enabled || false,
       ai_provider: settings.ai_provider || null,
-      anthropic_configured: !!settings.anthropic_api_key,
-      openai_configured: !!settings.openai_api_key,
-      ollama_configured: !!(settings.ollama_base_url && settings.ollama_model),
+      anthropic_api_key: settings.anthropic_api_key || null,
+      openai_api_key: settings.openai_api_key || null,
       ollama_base_url: settings.ollama_base_url || null,
       ollama_model: settings.ollama_model || null,
     });
@@ -235,9 +234,8 @@ router.put('/ai', async (req: AuthRequest, res: Response) => {
     res.json({
       ai_enabled: settings.ai_enabled || false,
       ai_provider: settings.ai_provider || null,
-      anthropic_configured: !!settings.anthropic_api_key,
-      openai_configured: !!settings.openai_api_key,
-      ollama_configured: !!(settings.ollama_base_url && settings.ollama_model),
+      anthropic_api_key: settings.anthropic_api_key || null,
+      openai_api_key: settings.openai_api_key || null,
       ollama_base_url: settings.ollama_base_url || null,
       ollama_model: settings.ollama_model || null,
       message: 'AI settings updated successfully',
