@@ -19,28 +19,39 @@ export interface AIVerificationResult {
   confidence: number;
   suggestedPrice: ParsedPrice | null;
   reason: string;
+  stockStatus?: StockStatus;
 }
 
-const VERIFICATION_PROMPT = `You are a price verification assistant. I scraped a product page and found a price. Please verify if this price is correct.
+const VERIFICATION_PROMPT = `You are a price and availability verification assistant. I scraped a product page and found a price. Please verify if this price is correct AND if the product is currently available for purchase.
 
 Scraped Price: $SCRAPED_PRICE$ $CURRENCY$
 
 Analyze the HTML content below and determine:
 1. Is the scraped price the correct CURRENT/SALE price for the main product?
 2. If not, what is the correct price?
+3. Is this product currently available for purchase RIGHT NOW?
 
-Common issues to watch for:
+Common price issues to watch for:
 - Scraped price might be a "savings" amount (e.g., "Save $189.99")
 - Scraped price might be from a bundle/combo deal section
 - Scraped price might be shipping cost or add-on price
 - Scraped price might be the original/crossed-out price instead of the sale price
+
+Common availability issues to watch for:
+- Product shows "Coming Soon" or "Available [future date]" - NOT in stock
+- Product shows "Pre-order" or "Reserve now" - NOT in stock
+- Product shows "Notify me when available" or "Sign up for alerts" - NOT in stock
+- Product shows "Out of stock" or "Sold out" - NOT in stock
+- Product has no "Add to Cart" button but shows a future release date - NOT in stock
+- Product CAN be added to cart and purchased today - IN stock
 
 Return a JSON object with:
 - isCorrect: boolean - true if the scraped price is correct
 - confidence: number from 0 to 1
 - suggestedPrice: the correct price as a number (or null if scraped price is correct)
 - suggestedCurrency: currency code if suggesting a different price
-- reason: brief explanation of your decision
+- stockStatus: "in_stock", "out_of_stock", or "unknown" - based on whether the product can be purchased RIGHT NOW
+- reason: brief explanation of your decision (mention both price and availability)
 
 Only return valid JSON, no explanation text outside the JSON.
 
@@ -314,6 +325,7 @@ function parseVerificationResponse(
     confidence: 0.5,
     suggestedPrice: null,
     reason: 'Could not parse AI response',
+    stockStatus: 'unknown',
   };
 
   let jsonStr = responseText.trim();
@@ -348,11 +360,23 @@ function parseVerificationResponse(
       }
     }
 
+    // Parse stock status from AI response
+    let stockStatus: StockStatus = 'unknown';
+    if (data.stockStatus) {
+      const status = data.stockStatus.toLowerCase().replace(/[^a-z_]/g, '');
+      if (status === 'in_stock' || status === 'instock') {
+        stockStatus = 'in_stock';
+      } else if (status === 'out_of_stock' || status === 'outofstock') {
+        stockStatus = 'out_of_stock';
+      }
+    }
+
     return {
       isCorrect: data.isCorrect ?? true,
       confidence: data.confidence ?? 0.5,
       suggestedPrice,
       reason: data.reason || 'No reason provided',
+      stockStatus,
     };
   } catch (error) {
     console.error('[AI Verify] Failed to parse response:', responseText);

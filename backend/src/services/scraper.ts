@@ -846,6 +846,15 @@ export async function scrapeProduct(url: string, userId?: number): Promise<Scrap
             console.log(`[AI Verify] Price might be incorrect but no confident suggestion: ${verifyResult.reason}`);
             // Don't set aiStatus if verification was inconclusive
           }
+
+          // Use AI-detected stock status if we don't have a definitive one yet
+          // or if AI says it's out of stock (AI can catch pre-order/coming soon)
+          if (verifyResult.stockStatus && verifyResult.stockStatus !== 'unknown') {
+            if (result.stockStatus === 'unknown' || verifyResult.stockStatus === 'out_of_stock') {
+              console.log(`[AI Verify] Stock status: ${verifyResult.stockStatus} (was: ${result.stockStatus})`);
+              result.stockStatus = verifyResult.stockStatus;
+            }
+          }
         }
       } catch (verifyError) {
         console.error(`[AI Verify] Verification failed for ${url}:`, verifyError);
@@ -1060,7 +1069,8 @@ function extractGenericStockStatus($: CheerioAPI): StockStatus {
   const availability = $('[itemprop="availability"]').attr('content') ||
                        $('[itemprop="availability"]').attr('href') || '';
   if (availability.toLowerCase().includes('outofstock') ||
-      availability.toLowerCase().includes('discontinued')) {
+      availability.toLowerCase().includes('discontinued') ||
+      availability.toLowerCase().includes('preorder')) {
     return 'out_of_stock';
   }
   if (availability.toLowerCase().includes('instock') ||
@@ -1068,14 +1078,96 @@ function extractGenericStockStatus($: CheerioAPI): StockStatus {
     return 'in_stock';
   }
 
-  // Check for add to cart button - strong indicator of in stock
-  const hasAddToCart = $('button[class*="add-to-cart" i]').length > 0 ||
-                       $('button[id*="add-to-cart" i]').length > 0 ||
-                       $('[data-testid*="add-to-cart" i]').length > 0 ||
-                       $('button:contains("Add to Cart")').length > 0 ||
-                       $('input[value*="Add to Cart" i]').length > 0;
+  // Be conservative - only check main product area text, not entire body
+  // to avoid false positives from sidebar recommendations, etc.
+  const mainContent = $('main, [role="main"], #main, .main-content, .product-detail, .pdp-main').text().toLowerCase();
+  const textToCheck = mainContent || $('body').text().toLowerCase().slice(0, 5000);
 
-  if (hasAddToCart) {
+  // Check for pre-order / coming soon indicators BEFORE checking add to cart
+  // Some sites show a "Pre-order" button that looks like add to cart
+  const preOrderComingSoonPhrases = [
+    'coming soon',
+    'coming in',
+    'available soon',
+    'available in',
+    'arriving soon',
+    'arriving in',
+    'releases on',
+    'release date',
+    'expected release',
+    'launches on',
+    'launching soon',
+    'pre-order',
+    'preorder',
+    'pre order',
+    'notify me when available',
+    'notify when available',
+    'sign up to be notified',
+    'sign up for availability',
+    'email me when available',
+    'get notified when',
+    'join the waitlist',
+    'join waitlist',
+    'not yet released',
+    'not yet available',
+    'coming this',
+    'coming next',
+    'available starting',
+  ];
+
+  for (const phrase of preOrderComingSoonPhrases) {
+    if (textToCheck.includes(phrase)) {
+      // Double check it's not just a section about pre-orders in general
+      // by looking for the phrase near price/product context
+      const phraseIndex = textToCheck.indexOf(phrase);
+      const contextStart = Math.max(0, phraseIndex - 200);
+      const contextEnd = Math.min(textToCheck.length, phraseIndex + 200);
+      const context = textToCheck.substring(contextStart, contextEnd);
+
+      // If the context mentions price, buy, cart, or product, it's likely about this product
+      if (context.includes('$') || context.includes('price') ||
+          context.includes('buy') || context.includes('cart') ||
+          context.includes('order') || context.includes('purchase')) {
+        return 'out_of_stock';
+      }
+    }
+  }
+
+  // Check for explicit pre-order/coming soon elements
+  const hasPreOrderBadge = $('[class*="pre-order" i]').length > 0 ||
+                           $('[class*="preorder" i]').length > 0 ||
+                           $('[class*="coming-soon" i]').length > 0 ||
+                           $('[class*="comingsoon" i]').length > 0 ||
+                           $('[data-testid*="pre-order" i]').length > 0 ||
+                           $('[data-testid*="coming-soon" i]').length > 0 ||
+                           $('button:contains("Pre-order")').length > 0 ||
+                           $('button:contains("Preorder")').length > 0 ||
+                           $('button:contains("Notify Me")').length > 0;
+
+  if (hasPreOrderBadge) {
+    return 'out_of_stock';
+  }
+
+  // Check for add to cart button - strong indicator of in stock
+  // But make sure it's not a pre-order button
+  const addToCartButtons = $('button[class*="add-to-cart" i], button[id*="add-to-cart" i], [data-testid*="add-to-cart" i], button:contains("Add to Cart"), input[value*="Add to Cart" i]');
+  let hasRealAddToCart = false;
+
+  addToCartButtons.each((_, el) => {
+    const buttonText = $(el).text().toLowerCase();
+    const buttonClass = $(el).attr('class')?.toLowerCase() || '';
+    // Make sure it's not a pre-order or notify button
+    if (!buttonText.includes('pre-order') &&
+        !buttonText.includes('preorder') &&
+        !buttonText.includes('notify') &&
+        !buttonText.includes('waitlist') &&
+        !buttonClass.includes('pre-order') &&
+        !buttonClass.includes('preorder')) {
+      hasRealAddToCart = true;
+    }
+  });
+
+  if (hasRealAddToCart) {
     return 'in_stock';
   }
 
@@ -1087,11 +1179,6 @@ function extractGenericStockStatus($: CheerioAPI): StockStatus {
   if (hasOutOfStockBadge) {
     return 'out_of_stock';
   }
-
-  // Be conservative - only check main product area text, not entire body
-  // to avoid false positives from sidebar recommendations, etc.
-  const mainContent = $('main, [role="main"], #main, .main-content, .product-detail, .pdp-main').text().toLowerCase();
-  const textToCheck = mainContent || $('body').text().toLowerCase().slice(0, 5000);
 
   // Strong out-of-stock phrases (must be exact matches to avoid false positives)
   const strongOutOfStockPhrases = [
