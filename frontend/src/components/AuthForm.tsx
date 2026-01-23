@@ -92,7 +92,8 @@ export default function AuthForm({ mode, onSubmit }: AuthFormProps) {
         }
 
         .auth-form-logo {
-          font-size: 2.5rem;
+          width: 64px;
+          height: 64px;
           margin-bottom: 0.5rem;
         }
 
@@ -146,7 +147,7 @@ export default function AuthForm({ mode, onSubmit }: AuthFormProps) {
 
       <div className="auth-form-card">
         <div className="auth-form-header">
-          <div className="auth-form-logo">👻</div>
+          <img src="/icon.svg" alt="PriceGhost" className="auth-form-logo" />
           <h1 className="auth-form-title">PriceGhost</h1>
           <p className="auth-form-subtitle">
             {mode === 'login'

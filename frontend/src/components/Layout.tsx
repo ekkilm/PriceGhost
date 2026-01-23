@@ -105,7 +105,8 @@ export default function Layout({ children }: LayoutProps) {
         }
 
         .navbar-brand-icon {
-          font-size: 1.5rem;
+          width: 28px;
+          height: 28px;
         }
 
         .navbar-user {
@@ -264,7 +265,7 @@ export default function Layout({ children }: LayoutProps) {
       <nav className="navbar">
         <div className="navbar-content">
           <Link to="/" className="navbar-brand">
-            <span className="navbar-brand-icon">👻</span>
+            <img src="/icon.svg" alt="" className="navbar-brand-icon" />
             <span>PriceGhost</span>
           </Link>
 
