@@ -15,6 +15,66 @@ import pool from './config/database';
 async function runMigrations() {
   const client = await pool.connect();
   try {
+    // First, ensure base tables exist (for fresh installs without init.sql)
+    await client.query(`
+      -- Users table
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        name VARCHAR(255),
+        is_admin BOOLEAN DEFAULT false,
+        telegram_bot_token VARCHAR(255),
+        telegram_chat_id VARCHAR(255),
+        discord_webhook_url TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- System settings table
+      CREATE TABLE IF NOT EXISTS system_settings (
+        key VARCHAR(255) PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- Default system settings
+      INSERT INTO system_settings (key, value) VALUES ('registration_enabled', 'true')
+      ON CONFLICT (key) DO NOTHING;
+
+      -- Products table
+      CREATE TABLE IF NOT EXISTS products (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        url TEXT NOT NULL,
+        name VARCHAR(255),
+        image_url TEXT,
+        refresh_interval INTEGER DEFAULT 3600,
+        last_checked TIMESTAMP,
+        next_check_at TIMESTAMP,
+        stock_status VARCHAR(20) DEFAULT 'unknown',
+        price_drop_threshold DECIMAL(10,2),
+        target_price DECIMAL(10,2),
+        notify_back_in_stock BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, url)
+      );
+
+      -- Price history table
+      CREATE TABLE IF NOT EXISTS price_history (
+        id SERIAL PRIMARY KEY,
+        product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+        price DECIMAL(10,2) NOT NULL,
+        currency VARCHAR(10) DEFAULT 'USD',
+        recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- Index for faster price history queries
+      CREATE INDEX IF NOT EXISTS idx_price_history_product_date
+      ON price_history(product_id, recorded_at);
+    `);
+
+    console.log('Base tables ensured');
+
     // Add AI settings columns to users table if they don't exist
     await client.query(`
       DO $$
@@ -90,6 +150,7 @@ async function runMigrations() {
     console.log('Database migrations completed');
   } catch (error) {
     console.error('Migration error:', error);
+    throw error; // Re-throw to prevent server from starting with broken DB
   } finally {
     client.release();
   }
@@ -131,17 +192,26 @@ app.use(
   }
 );
 
-// Start server
-app.listen(PORT, async () => {
-  console.log(`PriceGhost API server running on port ${PORT}`);
+// Start server with proper initialization sequence
+async function startServer() {
+  try {
+    // Run database migrations BEFORE accepting connections
+    await runMigrations();
 
-  // Run database migrations
-  await runMigrations();
+    app.listen(PORT, () => {
+      console.log(`PriceGhost API server running on port ${PORT}`);
 
-  // Start the background price checker
-  if (process.env.NODE_ENV !== 'test') {
-    startScheduler();
+      // Start the background price checker
+      if (process.env.NODE_ENV !== 'test') {
+        startScheduler();
+      }
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
   }
-});
+}
+
+startServer();
 
 export default app;
