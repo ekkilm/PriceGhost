@@ -195,6 +195,52 @@ export async function sendPushoverNotification(
   }
 }
 
+export async function sendNtfyNotification(
+  topic: string,
+  payload: NotificationPayload
+): Promise<boolean> {
+  try {
+    const currencySymbol = getCurrencySymbol(payload.currency);
+
+    let title: string;
+    let message: string;
+    let tags: string[];
+
+    if (payload.type === 'price_drop') {
+      const oldPriceStr = payload.oldPrice ? `${currencySymbol}${payload.oldPrice.toFixed(2)}` : 'N/A';
+      const newPriceStr = payload.newPrice ? `${currencySymbol}${payload.newPrice.toFixed(2)}` : 'N/A';
+      title = 'Price Drop Alert!';
+      message = `${payload.productName}\n\nPrice dropped from ${oldPriceStr} to ${newPriceStr}`;
+      tags = ['moneybag', 'chart_with_downwards_trend'];
+    } else if (payload.type === 'target_price') {
+      const newPriceStr = payload.newPrice ? `${currencySymbol}${payload.newPrice.toFixed(2)}` : 'N/A';
+      const targetPriceStr = payload.targetPrice ? `${currencySymbol}${payload.targetPrice.toFixed(2)}` : 'N/A';
+      title = 'Target Price Reached!';
+      message = `${payload.productName}\n\nPrice is now ${newPriceStr} (your target: ${targetPriceStr})`;
+      tags = ['dart', 'white_check_mark'];
+    } else {
+      const priceStr = payload.newPrice ? ` at ${currencySymbol}${payload.newPrice.toFixed(2)}` : '';
+      title = 'Back in Stock!';
+      message = `${payload.productName}\n\nThis item is now available${priceStr}`;
+      tags = ['package', 'tada'];
+    }
+
+    await axios.post(`https://ntfy.sh/${topic}`, message, {
+      headers: {
+        'Title': title,
+        'Tags': tags.join(','),
+        'Click': payload.productUrl,
+      },
+    });
+
+    console.log(`ntfy notification sent to topic ${topic}`);
+    return true;
+  } catch (error) {
+    console.error('Failed to send ntfy notification:', error);
+    return false;
+  }
+}
+
 export async function sendNotifications(
   settings: {
     telegram_bot_token: string | null;
@@ -205,6 +251,8 @@ export async function sendNotifications(
     pushover_user_key: string | null;
     pushover_app_token: string | null;
     pushover_enabled?: boolean;
+    ntfy_topic: string | null;
+    ntfy_enabled?: boolean;
   },
   payload: NotificationPayload
 ): Promise<void> {
@@ -225,6 +273,10 @@ export async function sendNotifications(
     promises.push(
       sendPushoverNotification(settings.pushover_user_key, settings.pushover_app_token, payload)
     );
+  }
+
+  if (settings.ntfy_topic && settings.ntfy_enabled !== false) {
+    promises.push(sendNtfyNotification(settings.ntfy_topic, payload));
   }
 
   await Promise.allSettled(promises);

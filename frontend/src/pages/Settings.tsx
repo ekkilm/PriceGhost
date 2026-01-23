@@ -39,8 +39,10 @@ export default function Settings() {
   const [pushoverUserKey, setPushoverUserKey] = useState('');
   const [pushoverAppToken, setPushoverAppToken] = useState('');
   const [pushoverEnabled, setPushoverEnabled] = useState(true);
+  const [ntfyTopic, setNtfyTopic] = useState('');
+  const [ntfyEnabled, setNtfyEnabled] = useState(true);
   const [isSavingNotifications, setIsSavingNotifications] = useState(false);
-  const [isTesting, setIsTesting] = useState<'telegram' | 'discord' | 'pushover' | null>(null);
+  const [isTesting, setIsTesting] = useState<'telegram' | 'discord' | 'pushover' | 'ntfy' | null>(null);
 
   // AI state
   const [aiSettings, setAISettings] = useState<AISettings | null>(null);
@@ -90,6 +92,8 @@ export default function Settings() {
       setPushoverUserKey(notificationsRes.data.pushover_user_key || '');
       setPushoverAppToken(notificationsRes.data.pushover_app_token || '');
       setPushoverEnabled(notificationsRes.data.pushover_enabled ?? true);
+      setNtfyTopic(notificationsRes.data.ntfy_topic || '');
+      setNtfyEnabled(notificationsRes.data.ntfy_enabled ?? true);
       // Populate AI fields with actual values
       setAISettings(aiRes.data);
       setAIEnabled(aiRes.data.ai_enabled);
@@ -299,6 +303,46 @@ export default function Settings() {
     } catch {
       setPushoverEnabled(!enabled);
       setError('Failed to update Pushover status');
+    }
+  };
+
+  const handleSaveNtfy = async () => {
+    clearMessages();
+    setIsSavingNotifications(true);
+    try {
+      const response = await settingsApi.updateNotifications({
+        ntfy_topic: ntfyTopic || null,
+      });
+      setNotificationSettings(response.data);
+      setSuccess('ntfy settings saved successfully');
+    } catch {
+      setError('Failed to save ntfy settings');
+    } finally {
+      setIsSavingNotifications(false);
+    }
+  };
+
+  const handleTestNtfy = async () => {
+    clearMessages();
+    setIsTesting('ntfy');
+    try {
+      await settingsApi.testNtfy();
+      setSuccess('Test notification sent to ntfy!');
+    } catch {
+      setError('Failed to send test notification');
+    } finally {
+      setIsTesting(null);
+    }
+  };
+
+  const handleToggleNtfy = async (enabled: boolean) => {
+    setNtfyEnabled(enabled);
+    try {
+      const response = await settingsApi.updateNotifications({ ntfy_enabled: enabled });
+      setNotificationSettings(response.data);
+    } catch {
+      setNtfyEnabled(!enabled);
+      setError('Failed to update ntfy status');
     }
   };
 
@@ -1146,6 +1190,68 @@ export default function Settings() {
                       disabled={isTesting === 'pushover'}
                     >
                       {isTesting === 'pushover' ? 'Sending...' : 'Send Test'}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <div className="settings-section-header">
+                  <span className="settings-section-icon">📲</span>
+                  <h2 className="settings-section-title">ntfy Notifications</h2>
+                  <span className={`settings-section-status ${notificationSettings?.ntfy_topic ? 'configured' : 'not-configured'}`}>
+                    {notificationSettings?.ntfy_topic ? 'Configured' : 'Not configured'}
+                  </span>
+                </div>
+                <p className="settings-section-description">
+                  Receive push notifications via ntfy.sh - a simple, free notification service.
+                  No account required! Just pick a topic name and subscribe to it in the ntfy app.
+                </p>
+
+                {notificationSettings?.ntfy_topic && (
+                  <div className="settings-toggle">
+                    <div className="settings-toggle-label">
+                      <span className="settings-toggle-title">Enable ntfy Notifications</span>
+                      <span className="settings-toggle-description">
+                        Toggle to enable or disable ntfy alerts
+                      </span>
+                    </div>
+                    <button
+                      className={`toggle-switch ${ntfyEnabled ? 'active' : ''}`}
+                      onClick={() => handleToggleNtfy(!ntfyEnabled)}
+                    />
+                  </div>
+                )}
+
+                <div className="settings-form-group">
+                  <label>Topic Name</label>
+                  <input
+                    type="text"
+                    value={ntfyTopic}
+                    onChange={(e) => setNtfyTopic(e.target.value)}
+                    placeholder="my-price-alerts"
+                  />
+                  <p className="hint">
+                    Pick a unique topic name (e.g., priceghost-myname-123). Then subscribe to it in the{' '}
+                    <a href="https://ntfy.sh" target="_blank" rel="noopener noreferrer">ntfy app</a>.
+                  </p>
+                </div>
+
+                <div className="settings-form-actions">
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleSaveNtfy}
+                    disabled={isSavingNotifications}
+                  >
+                    {isSavingNotifications ? 'Saving...' : 'Save ntfy Settings'}
+                  </button>
+                  {notificationSettings?.ntfy_topic && (
+                    <button
+                      className="btn btn-secondary"
+                      onClick={handleTestNtfy}
+                      disabled={isTesting === 'ntfy'}
+                    >
+                      {isTesting === 'ntfy' ? 'Sending...' : 'Send Test'}
                     </button>
                   )}
                 </div>

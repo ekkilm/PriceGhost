@@ -27,6 +27,8 @@ router.get('/notifications', async (req: AuthRequest, res: Response) => {
       pushover_user_key: settings.pushover_user_key || null,
       pushover_app_token: settings.pushover_app_token || null,
       pushover_enabled: settings.pushover_enabled ?? true,
+      ntfy_topic: settings.ntfy_topic || null,
+      ntfy_enabled: settings.ntfy_enabled ?? true,
     });
   } catch (error) {
     console.error('Error fetching notification settings:', error);
@@ -47,6 +49,8 @@ router.put('/notifications', async (req: AuthRequest, res: Response) => {
       pushover_user_key,
       pushover_app_token,
       pushover_enabled,
+      ntfy_topic,
+      ntfy_enabled,
     } = req.body;
 
     const settings = await userQueries.updateNotificationSettings(userId, {
@@ -58,6 +62,8 @@ router.put('/notifications', async (req: AuthRequest, res: Response) => {
       pushover_user_key,
       pushover_app_token,
       pushover_enabled,
+      ntfy_topic,
+      ntfy_enabled,
     });
 
     if (!settings) {
@@ -74,6 +80,8 @@ router.put('/notifications', async (req: AuthRequest, res: Response) => {
       pushover_user_key: settings.pushover_user_key || null,
       pushover_app_token: settings.pushover_app_token || null,
       pushover_enabled: settings.pushover_enabled ?? true,
+      ntfy_topic: settings.ntfy_topic || null,
+      ntfy_enabled: settings.ntfy_enabled ?? true,
       message: 'Notification settings updated successfully',
     });
   } catch (error) {
@@ -182,6 +190,38 @@ router.post('/notifications/test/pushover', async (req: AuthRequest, res: Respon
     }
   } catch (error) {
     console.error('Error sending test Pushover notification:', error);
+    res.status(500).json({ error: 'Failed to send test notification' });
+  }
+});
+
+// Test ntfy notification
+router.post('/notifications/test/ntfy', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    const settings = await userQueries.getNotificationSettings(userId);
+
+    if (!settings?.ntfy_topic) {
+      res.status(400).json({ error: 'ntfy not configured' });
+      return;
+    }
+
+    const { sendNtfyNotification } = await import('../services/notifications');
+    const success = await sendNtfyNotification(settings.ntfy_topic, {
+      productName: 'Test Product',
+      productUrl: 'https://example.com',
+      type: 'price_drop',
+      oldPrice: 29.99,
+      newPrice: 19.99,
+      currency: 'USD',
+    });
+
+    if (success) {
+      res.json({ message: 'Test notification sent successfully' });
+    } else {
+      res.status(500).json({ error: 'Failed to send test notification' });
+    }
+  } catch (error) {
+    console.error('Error sending test ntfy notification:', error);
     res.status(500).json({ error: 'Failed to send test notification' });
   }
 });

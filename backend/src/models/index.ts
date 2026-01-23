@@ -30,6 +30,8 @@ export interface NotificationSettings {
   pushover_user_key: string | null;
   pushover_app_token: string | null;
   pushover_enabled: boolean;
+  ntfy_topic: string | null;
+  ntfy_enabled: boolean;
 }
 
 export interface AISettings {
@@ -70,7 +72,8 @@ export const userQueries = {
     const result = await pool.query(
       `SELECT telegram_bot_token, telegram_chat_id, COALESCE(telegram_enabled, true) as telegram_enabled,
               discord_webhook_url, COALESCE(discord_enabled, true) as discord_enabled,
-              pushover_user_key, pushover_app_token, COALESCE(pushover_enabled, true) as pushover_enabled
+              pushover_user_key, pushover_app_token, COALESCE(pushover_enabled, true) as pushover_enabled,
+              ntfy_topic, COALESCE(ntfy_enabled, true) as ntfy_enabled
        FROM users WHERE id = $1`,
       [id]
     );
@@ -117,6 +120,14 @@ export const userQueries = {
       fields.push(`pushover_enabled = $${paramIndex++}`);
       values.push(settings.pushover_enabled);
     }
+    if (settings.ntfy_topic !== undefined) {
+      fields.push(`ntfy_topic = $${paramIndex++}`);
+      values.push(settings.ntfy_topic);
+    }
+    if (settings.ntfy_enabled !== undefined) {
+      fields.push(`ntfy_enabled = $${paramIndex++}`);
+      values.push(settings.ntfy_enabled);
+    }
 
     if (fields.length === 0) return null;
 
@@ -125,7 +136,8 @@ export const userQueries = {
       `UPDATE users SET ${fields.join(', ')} WHERE id = $${paramIndex}
        RETURNING telegram_bot_token, telegram_chat_id, COALESCE(telegram_enabled, true) as telegram_enabled,
                  discord_webhook_url, COALESCE(discord_enabled, true) as discord_enabled,
-                 pushover_user_key, pushover_app_token, COALESCE(pushover_enabled, true) as pushover_enabled`,
+                 pushover_user_key, pushover_app_token, COALESCE(pushover_enabled, true) as pushover_enabled,
+                 ntfy_topic, COALESCE(ntfy_enabled, true) as ntfy_enabled`,
       values
     );
     return result.rows[0] || null;

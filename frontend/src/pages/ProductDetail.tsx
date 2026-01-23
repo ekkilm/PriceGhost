@@ -527,7 +527,8 @@ export default function ProductDetail() {
       {notificationSettings && (
         ((notificationSettings.telegram_bot_token && notificationSettings.telegram_chat_id) && notificationSettings.telegram_enabled) ||
         (notificationSettings.discord_webhook_url && notificationSettings.discord_enabled) ||
-        ((notificationSettings.pushover_user_key && notificationSettings.pushover_app_token) && notificationSettings.pushover_enabled)
+        ((notificationSettings.pushover_user_key && notificationSettings.pushover_app_token) && notificationSettings.pushover_enabled) ||
+        (notificationSettings.ntfy_topic && notificationSettings.ntfy_enabled)
       ) && (
         <>
           <style>{`
@@ -684,6 +685,9 @@ export default function ProductDetail() {
                 )}
                 {(notificationSettings.pushover_user_key && notificationSettings.pushover_app_token) && notificationSettings.pushover_enabled && (
                   <span className="notification-channel-badge">Pushover</span>
+                )}
+                {notificationSettings.ntfy_topic && notificationSettings.ntfy_enabled && (
+                  <span className="notification-channel-badge">ntfy</span>
                 )}
               </div>
             </div>

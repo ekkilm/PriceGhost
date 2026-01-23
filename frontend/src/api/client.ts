@@ -157,6 +157,8 @@ export interface NotificationSettings {
   pushover_user_key: string | null;
   pushover_app_token: string | null;
   pushover_enabled: boolean;
+  ntfy_topic: string | null;
+  ntfy_enabled: boolean;
 }
 
 export const settingsApi = {
@@ -172,6 +174,8 @@ export const settingsApi = {
     pushover_user_key?: string | null;
     pushover_app_token?: string | null;
     pushover_enabled?: boolean;
+    ntfy_topic?: string | null;
+    ntfy_enabled?: boolean;
   }) => api.put<NotificationSettings & { message: string }>('/settings/notifications', data),
 
   testTelegram: () =>
@@ -182,6 +186,9 @@ export const settingsApi = {
 
   testPushover: () =>
     api.post<{ message: string }>('/settings/notifications/test/pushover'),
+
+  testNtfy: () =>
+    api.post<{ message: string }>('/settings/notifications/test/ntfy'),
 
   // AI Settings
   getAI: () =>
