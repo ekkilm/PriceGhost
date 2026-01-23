@@ -14,11 +14,17 @@ import {
 
 type SettingsSection = 'profile' | 'notifications' | 'ai' | 'admin';
 
+interface VersionInfo {
+  version: string;
+  releaseDate: string;
+}
+
 export default function Settings() {
   const [activeSection, setActiveSection] = useState<SettingsSection>('profile');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
 
   // Profile state
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -72,6 +78,11 @@ export default function Settings() {
 
   useEffect(() => {
     fetchInitialData();
+    // Fetch version info
+    fetch('/version.json')
+      .then(res => res.json())
+      .then(data => setVersionInfo(data))
+      .catch(() => {}); // Silently fail if version.json not found
   }, []);
 
   const fetchInitialData = async () => {
@@ -1698,6 +1709,38 @@ export default function Settings() {
             </>
           )}
         </div>
+
+        {/* Version Info */}
+        {versionInfo && (
+          <div style={{
+            marginTop: '2rem',
+            paddingTop: '1rem',
+            borderTop: '1px solid var(--border)',
+            textAlign: 'center',
+            color: 'var(--text-muted)',
+            fontSize: '0.75rem',
+          }}>
+            <span>PriceGhost v{versionInfo.version}</span>
+            <span style={{ margin: '0 0.5rem' }}>•</span>
+            <a
+              href="https://github.com/clucraft/PriceGhost/blob/main/CHANGELOG.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: 'var(--primary)', textDecoration: 'none' }}
+            >
+              Changelog
+            </a>
+            <span style={{ margin: '0 0.5rem' }}>•</span>
+            <a
+              href="https://github.com/clucraft/PriceGhost"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: 'var(--primary)', textDecoration: 'none' }}
+            >
+              GitHub
+            </a>
+          </div>
+        )}
       </div>
     </Layout>
   );
