@@ -987,7 +987,7 @@ export default function Settings() {
                   <PasswordInput
                     value={telegramBotToken}
                     onChange={(e) => setTelegramBotToken(e.target.value)}
-                    placeholder={notificationSettings?.telegram_configured ? '••••••••••••••••' : 'Enter your bot token'}
+                    placeholder={notificationSettings?.telegram_configured ? 'Saved - enter new value to replace' : 'Enter your bot token'}
                   />
                   <p className="hint">Create a bot via @BotFather on Telegram to get a token</p>
                 </div>
@@ -1056,7 +1056,7 @@ export default function Settings() {
                   <PasswordInput
                     value={discordWebhookUrl}
                     onChange={(e) => setDiscordWebhookUrl(e.target.value)}
-                    placeholder={notificationSettings?.discord_configured ? '••••••••••••••••' : 'https://discord.com/api/webhooks/...'}
+                    placeholder={notificationSettings?.discord_configured ? 'Saved - enter new value to replace' : 'https://discord.com/api/webhooks/...'}
                   />
                   <p className="hint">Server Settings → Integrations → Webhooks → New Webhook</p>
                 </div>
@@ -1114,7 +1114,7 @@ export default function Settings() {
                   <PasswordInput
                     value={pushoverUserKey}
                     onChange={(e) => setPushoverUserKey(e.target.value)}
-                    placeholder={notificationSettings?.pushover_configured ? '••••••••••••••••' : 'Enter your user key'}
+                    placeholder={notificationSettings?.pushover_configured ? 'Saved - enter new value to replace' : 'Enter your user key'}
                   />
                   <p className="hint">Find your User Key on the Pushover dashboard after logging in</p>
                 </div>
@@ -1124,7 +1124,7 @@ export default function Settings() {
                   <PasswordInput
                     value={pushoverAppToken}
                     onChange={(e) => setPushoverAppToken(e.target.value)}
-                    placeholder={notificationSettings?.pushover_configured ? '••••••••••••••••' : 'Enter your app token'}
+                    placeholder={notificationSettings?.pushover_configured ? 'Saved - enter new value to replace' : 'Enter your app token'}
                   />
                   <p className="hint">Create an application at pushover.net/apps to get an API token</p>
                 </div>
@@ -1208,7 +1208,7 @@ export default function Settings() {
                         <PasswordInput
                           value={anthropicApiKey}
                           onChange={(e) => setAnthropicApiKey(e.target.value)}
-                          placeholder={aiSettings?.anthropic_configured ? '••••••••••••••••' : 'sk-ant-...'}
+                          placeholder={aiSettings?.anthropic_configured ? 'Saved - enter new value to replace' : 'sk-ant-...'}
                         />
                         <p className="hint">
                           Get your API key from{' '}
@@ -1226,7 +1226,7 @@ export default function Settings() {
                         <PasswordInput
                           value={openaiApiKey}
                           onChange={(e) => setOpenaiApiKey(e.target.value)}
-                          placeholder={aiSettings?.openai_configured ? '••••••••••••••••' : 'sk-...'}
+                          placeholder={aiSettings?.openai_configured ? 'Saved - enter new value to replace' : 'sk-...'}
                         />
                         <p className="hint">
                           Get your API key from{' '}

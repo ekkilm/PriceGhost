@@ -4,23 +4,30 @@ interface PasswordInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>,
   // All standard input props are inherited
 }
 
-export default function PasswordInput({ style, ...props }: PasswordInputProps) {
+export default function PasswordInput({ style, value, ...props }: PasswordInputProps) {
   const [visible, setVisible] = useState(false);
+  const hasValue = value !== undefined && value !== null && String(value).length > 0;
 
   return (
-    <div style={{ position: 'relative', display: 'flex' }}>
+    <div style={{ position: 'relative' }}>
       <input
         {...props}
+        value={value}
         type={visible ? 'text' : 'password'}
         style={{
           ...style,
           width: '100%',
-          paddingRight: '2.5rem',
+          paddingRight: hasValue ? '2.5rem' : '0.75rem',
+          boxSizing: 'border-box',
         }}
       />
-      <button
+      {hasValue && <button
         type="button"
-        onClick={() => setVisible(!visible)}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setVisible(!visible);
+        }}
         style={{
           position: 'absolute',
           right: '0.5rem',
@@ -33,7 +40,8 @@ export default function PasswordInput({ style, ...props }: PasswordInputProps) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: 'var(--text-muted)',
+          color: visible ? 'var(--primary)' : 'var(--text-muted)',
+          zIndex: 10,
         }}
         title={visible ? 'Hide' : 'Show'}
         aria-label={visible ? 'Hide password' : 'Show password'}
@@ -71,7 +79,7 @@ export default function PasswordInput({ style, ...props }: PasswordInputProps) {
             <circle cx="12" cy="12" r="3" />
           </svg>
         )}
-      </button>
+      </button>}
     </div>
   );
 }
