@@ -109,6 +109,36 @@ export default function Layout({ children }: LayoutProps) {
           height: 28px;
         }
 
+        .navbar-brand-text {
+          display: flex;
+        }
+
+        .navbar-brand-ghost {
+          background: linear-gradient(90deg, var(--text) 0%, var(--text) 20%, transparent 100%);
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+          text-shadow: 0 0 8px var(--ghost-glow, rgba(150, 150, 150, 0.4));
+          position: relative;
+        }
+
+        .navbar-brand:hover .navbar-brand-ghost {
+          background: linear-gradient(90deg, var(--primary) 0%, var(--primary) 20%, transparent 100%);
+          -webkit-background-clip: text;
+          background-clip: text;
+          text-shadow: 0 0 12px var(--primary-glow, rgba(99, 102, 241, 0.5));
+        }
+
+        [data-theme="dark"] {
+          --ghost-glow: rgba(200, 200, 200, 0.3);
+          --primary-glow: rgba(129, 140, 248, 0.5);
+        }
+
+        [data-theme="light"] {
+          --ghost-glow: rgba(100, 100, 100, 0.25);
+          --primary-glow: rgba(99, 102, 241, 0.4);
+        }
+
         .navbar-user {
           display: flex;
           align-items: center;
@@ -266,7 +296,10 @@ export default function Layout({ children }: LayoutProps) {
         <div className="navbar-content">
           <Link to="/" className="navbar-brand">
             <img src="/icon.svg" alt="" className="navbar-brand-icon" />
-            <span>PriceGhost</span>
+            <span className="navbar-brand-text">
+              <span>Price</span>
+              <span className="navbar-brand-ghost">Ghost</span>
+            </span>
           </Link>
 
           <div className="navbar-user">
