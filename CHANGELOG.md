@@ -5,6 +5,20 @@ All notable changes to PriceGhost will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-01-23
+
+### Added
+
+- **Notification History** - Complete log of all triggered notifications accessible via bell icon in navbar
+  - Bell icon with badge showing recent notification count (last 24 hours)
+  - Dropdown preview showing 5 most recent notifications
+  - Full history page at `/notifications` with filtering by type
+  - Tracks price drops, target price alerts, and back-in-stock notifications
+  - Shows which channels (Telegram, Discord, Pushover, ntfy) received each notification
+  - Links to product detail pages from notification entries
+
+---
+
 ## [1.0.2] - 2026-01-23
 
 ### Fixed
@@ -114,6 +128,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Description |
 |---------|------|-------------|
+| 1.0.3 | 2026-01-23 | Notification history with bell icon dropdown and full history page |
 | 1.0.2 | 2026-01-23 | Fixed stock status false positives for in-stock items |
 | 1.0.1 | 2026-01-23 | Bug fixes, JS-rendered price support, pre-order detection |
 | 1.0.0 | 2026-01-23 | Initial public release |

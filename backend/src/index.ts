@@ -8,6 +8,7 @@ import priceRoutes from './routes/prices';
 import settingsRoutes from './routes/settings';
 import profileRoutes from './routes/profile';
 import adminRoutes from './routes/admin';
+import notificationRoutes from './routes/notifications';
 import { startScheduler } from './services/scheduler';
 import pool from './config/database';
 
@@ -147,6 +148,33 @@ async function runMigrations() {
       END $$;
     `);
 
+    // Create notification_history table for tracking all triggered notifications
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS notification_history (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        product_id INTEGER REFERENCES products(id) ON DELETE CASCADE,
+        notification_type VARCHAR(50) NOT NULL,
+        triggered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        old_price DECIMAL(10,2),
+        new_price DECIMAL(10,2),
+        currency VARCHAR(10),
+        price_change_percent DECIMAL(5,2),
+        target_price DECIMAL(10,2),
+        old_stock_status VARCHAR(20),
+        new_stock_status VARCHAR(20),
+        channels_notified JSONB,
+        product_name VARCHAR(500),
+        product_url TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_notification_history_user_date
+        ON notification_history(user_id, triggered_at DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_notification_history_product
+        ON notification_history(product_id);
+    `);
+
     console.log('Database migrations completed');
   } catch (error) {
     console.error('Migration error:', error);
@@ -178,6 +206,7 @@ app.use('/api/products', priceRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Error handling middleware
 app.use(

@@ -7,6 +7,7 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import ProductDetail from './pages/ProductDetail';
 import Settings from './pages/Settings';
+import NotificationHistory from './pages/NotificationHistory';
 
 function ThemeInitializer({ children }: { children: React.ReactNode }) {
   useEffect(() => {
@@ -108,6 +109,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Settings />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute>
+            <NotificationHistory />
           </ProtectedRoute>
         }
       />

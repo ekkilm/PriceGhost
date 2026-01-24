@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { productQueries, priceHistoryQueries, userQueries, stockStatusHistoryQueries } from '../models';
+import { productQueries, priceHistoryQueries, userQueries, stockStatusHistoryQueries, notificationHistoryQueries, NotificationType } from '../models';
 import { scrapeProduct } from './scraper';
 import { sendNotifications, NotificationPayload } from './notifications';
 
@@ -52,8 +52,24 @@ async function checkPrices(): Promise<void> {
                   newPrice: scrapedData.price?.price,
                   currency: scrapedData.price?.currency || 'USD',
                 };
-                await sendNotifications(userSettings, payload);
+                const result = await sendNotifications(userSettings, payload);
                 console.log(`Back-in-stock notification sent for product ${product.id}`);
+
+                // Log notification to history
+                if (result.channelsNotified.length > 0) {
+                  await notificationHistoryQueries.create({
+                    user_id: product.user_id,
+                    product_id: product.id,
+                    notification_type: 'stock_change' as NotificationType,
+                    old_stock_status: product.stock_status,
+                    new_stock_status: scrapedData.stockStatus,
+                    new_price: scrapedData.price?.price,
+                    currency: scrapedData.price?.currency || 'USD',
+                    channels_notified: result.channelsNotified,
+                    product_name: product.name || 'Unknown Product',
+                    product_url: product.url,
+                  });
+                }
               }
             } catch (notifyError) {
               console.error(`Failed to send back-in-stock notification for product ${product.id}:`, notifyError);
@@ -86,8 +102,25 @@ async function checkPrices(): Promise<void> {
                       currency: scrapedData.price.currency,
                       threshold: product.price_drop_threshold,
                     };
-                    await sendNotifications(userSettings, payload);
+                    const result = await sendNotifications(userSettings, payload);
                     console.log(`Price drop notification sent for product ${product.id}: ${priceDrop} drop`);
+
+                    // Log notification to history
+                    if (result.channelsNotified.length > 0) {
+                      const priceChangePercent = ((oldPrice - newPrice) / oldPrice) * 100;
+                      await notificationHistoryQueries.create({
+                        user_id: product.user_id,
+                        product_id: product.id,
+                        notification_type: 'price_drop' as NotificationType,
+                        old_price: oldPrice,
+                        new_price: newPrice,
+                        currency: scrapedData.price.currency,
+                        price_change_percent: Math.round(priceChangePercent * 100) / 100,
+                        channels_notified: result.channelsNotified,
+                        product_name: product.name || 'Unknown Product',
+                        product_url: product.url,
+                      });
+                    }
                   }
                 } catch (notifyError) {
                   console.error(`Failed to send price drop notification for product ${product.id}:`, notifyError);
@@ -114,8 +147,24 @@ async function checkPrices(): Promise<void> {
                       currency: scrapedData.price.currency,
                       targetPrice: targetPrice,
                     };
-                    await sendNotifications(userSettings, payload);
+                    const result = await sendNotifications(userSettings, payload);
                     console.log(`Target price notification sent for product ${product.id}: ${newPrice} <= ${targetPrice}`);
+
+                    // Log notification to history
+                    if (result.channelsNotified.length > 0) {
+                      await notificationHistoryQueries.create({
+                        user_id: product.user_id,
+                        product_id: product.id,
+                        notification_type: 'price_target' as NotificationType,
+                        old_price: oldPrice || undefined,
+                        new_price: newPrice,
+                        currency: scrapedData.price.currency,
+                        target_price: targetPrice,
+                        channels_notified: result.channelsNotified,
+                        product_name: product.name || 'Unknown Product',
+                        product_url: product.url,
+                      });
+                    }
                   }
                 } catch (notifyError) {
                   console.error(`Failed to send target price notification for product ${product.id}:`, notifyError);

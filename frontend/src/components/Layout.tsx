@@ -1,6 +1,7 @@
 import { ReactNode, useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import NotificationBell from './NotificationBell';
 
 interface LayoutProps {
   children: ReactNode;
@@ -310,6 +311,7 @@ export default function Layout({ children }: LayoutProps) {
             >
               {theme === 'light' ? '🌙' : '☀️'}
             </button>
+            {user && <NotificationBell />}
             {user && (
               <div className="user-dropdown" ref={dropdownRef}>
                 <button

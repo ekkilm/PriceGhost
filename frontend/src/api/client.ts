@@ -262,6 +262,59 @@ export const profileApi = {
     }),
 };
 
+// Notification History API
+export type NotificationType = 'price_drop' | 'price_target' | 'stock_change';
+
+export interface NotificationHistoryEntry {
+  id: number;
+  user_id: number;
+  product_id: number;
+  notification_type: NotificationType;
+  triggered_at: string;
+  old_price: number | null;
+  new_price: number | null;
+  currency: string | null;
+  price_change_percent: number | null;
+  target_price: number | null;
+  old_stock_status: string | null;
+  new_stock_status: string | null;
+  channels_notified: string[];
+  product_name: string | null;
+  product_url: string | null;
+}
+
+export interface NotificationHistoryResponse {
+  notifications: NotificationHistoryEntry[];
+  pagination: {
+    page: number;
+    limit: number;
+    totalCount: number;
+    totalPages: number;
+  };
+}
+
+export interface RecentNotificationsResponse {
+  notifications: NotificationHistoryEntry[];
+  recentCount: number;
+}
+
+export const notificationsApi = {
+  getRecent: (limit?: number) =>
+    api.get<RecentNotificationsResponse>('/notifications/recent', {
+      params: limit ? { limit } : undefined,
+    }),
+
+  getHistory: (page?: number, limit?: number) =>
+    api.get<NotificationHistoryResponse>('/notifications/history', {
+      params: { page: page || 1, limit: limit || 20 },
+    }),
+
+  getCount: (hours?: number) =>
+    api.get<{ count: number }>('/notifications/count', {
+      params: hours ? { hours } : undefined,
+    }),
+};
+
 // Admin API
 export interface SystemSettings {
   registration_enabled: string;

@@ -773,3 +773,127 @@ export const stockStatusHistoryQueries = {
     };
   },
 };
+
+// Notification History types and queries
+export type NotificationType = 'price_drop' | 'price_target' | 'stock_change';
+
+export interface NotificationHistory {
+  id: number;
+  user_id: number;
+  product_id: number;
+  notification_type: NotificationType;
+  triggered_at: Date;
+  old_price: number | null;
+  new_price: number | null;
+  currency: string | null;
+  price_change_percent: number | null;
+  target_price: number | null;
+  old_stock_status: string | null;
+  new_stock_status: string | null;
+  channels_notified: string[];
+  product_name: string | null;
+  product_url: string | null;
+}
+
+export interface CreateNotificationHistory {
+  user_id: number;
+  product_id: number;
+  notification_type: NotificationType;
+  old_price?: number;
+  new_price?: number;
+  currency?: string;
+  price_change_percent?: number;
+  target_price?: number;
+  old_stock_status?: string;
+  new_stock_status?: string;
+  channels_notified: string[];
+  product_name?: string;
+  product_url?: string;
+}
+
+export const notificationHistoryQueries = {
+  // Create a new notification history record
+  create: async (data: CreateNotificationHistory): Promise<NotificationHistory> => {
+    const result = await pool.query(
+      `INSERT INTO notification_history
+       (user_id, product_id, notification_type, old_price, new_price, currency,
+        price_change_percent, target_price, old_stock_status, new_stock_status,
+        channels_notified, product_name, product_url)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       RETURNING *`,
+      [
+        data.user_id,
+        data.product_id,
+        data.notification_type,
+        data.old_price || null,
+        data.new_price || null,
+        data.currency || null,
+        data.price_change_percent || null,
+        data.target_price || null,
+        data.old_stock_status || null,
+        data.new_stock_status || null,
+        JSON.stringify(data.channels_notified),
+        data.product_name || null,
+        data.product_url || null,
+      ]
+    );
+    return result.rows[0];
+  },
+
+  // Get notifications for a user with pagination
+  getByUserId: async (
+    userId: number,
+    limit: number = 50,
+    offset: number = 0
+  ): Promise<NotificationHistory[]> => {
+    const result = await pool.query(
+      `SELECT * FROM notification_history
+       WHERE user_id = $1
+       ORDER BY triggered_at DESC
+       LIMIT $2 OFFSET $3`,
+      [userId, limit, offset]
+    );
+    return result.rows;
+  },
+
+  // Get recent notifications (for bell dropdown)
+  getRecent: async (userId: number, limit: number = 10): Promise<NotificationHistory[]> => {
+    const result = await pool.query(
+      `SELECT * FROM notification_history
+       WHERE user_id = $1
+       ORDER BY triggered_at DESC
+       LIMIT $2`,
+      [userId, limit]
+    );
+    return result.rows;
+  },
+
+  // Count notifications in last 24 hours (for badge)
+  countRecent: async (userId: number, hours: number = 24): Promise<number> => {
+    const result = await pool.query(
+      `SELECT COUNT(*) FROM notification_history
+       WHERE user_id = $1 AND triggered_at > NOW() - INTERVAL '1 hour' * $2`,
+      [userId, hours]
+    );
+    return parseInt(result.rows[0].count, 10);
+  },
+
+  // Get total count for pagination
+  getTotalCount: async (userId: number): Promise<number> => {
+    const result = await pool.query(
+      `SELECT COUNT(*) FROM notification_history WHERE user_id = $1`,
+      [userId]
+    );
+    return parseInt(result.rows[0].count, 10);
+  },
+
+  // Delete old notifications (for cleanup)
+  deleteOlderThan: async (days: number): Promise<number> => {
+    const result = await pool.query(
+      `DELETE FROM notification_history
+       WHERE triggered_at < NOW() - INTERVAL '1 day' * $1`,
+      [days]
+    );
+    return result.rowCount || 0;
+  },
+};

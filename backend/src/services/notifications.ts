@@ -241,6 +241,11 @@ export async function sendNtfyNotification(
   }
 }
 
+export interface NotificationResult {
+  channelsNotified: string[];
+  channelsFailed: string[];
+}
+
 export async function sendNotifications(
   settings: {
     telegram_bot_token: string | null;
@@ -255,29 +260,51 @@ export async function sendNotifications(
     ntfy_enabled?: boolean;
   },
   payload: NotificationPayload
-): Promise<void> {
-  const promises: Promise<boolean>[] = [];
+): Promise<NotificationResult> {
+  const channelPromises: { channel: string; promise: Promise<boolean> }[] = [];
 
   // Only send if channel is configured AND enabled (default to true if not specified)
   if (settings.telegram_bot_token && settings.telegram_chat_id && settings.telegram_enabled !== false) {
-    promises.push(
-      sendTelegramNotification(settings.telegram_bot_token, settings.telegram_chat_id, payload)
-    );
+    channelPromises.push({
+      channel: 'telegram',
+      promise: sendTelegramNotification(settings.telegram_bot_token, settings.telegram_chat_id, payload),
+    });
   }
 
   if (settings.discord_webhook_url && settings.discord_enabled !== false) {
-    promises.push(sendDiscordNotification(settings.discord_webhook_url, payload));
+    channelPromises.push({
+      channel: 'discord',
+      promise: sendDiscordNotification(settings.discord_webhook_url, payload),
+    });
   }
 
   if (settings.pushover_user_key && settings.pushover_app_token && settings.pushover_enabled !== false) {
-    promises.push(
-      sendPushoverNotification(settings.pushover_user_key, settings.pushover_app_token, payload)
-    );
+    channelPromises.push({
+      channel: 'pushover',
+      promise: sendPushoverNotification(settings.pushover_user_key, settings.pushover_app_token, payload),
+    });
   }
 
   if (settings.ntfy_topic && settings.ntfy_enabled !== false) {
-    promises.push(sendNtfyNotification(settings.ntfy_topic, payload));
+    channelPromises.push({
+      channel: 'ntfy',
+      promise: sendNtfyNotification(settings.ntfy_topic, payload),
+    });
   }
 
-  await Promise.allSettled(promises);
+  const results = await Promise.allSettled(channelPromises.map(c => c.promise));
+
+  const channelsNotified: string[] = [];
+  const channelsFailed: string[] = [];
+
+  results.forEach((result, index) => {
+    const channel = channelPromises[index].channel;
+    if (result.status === 'fulfilled' && result.value === true) {
+      channelsNotified.push(channel);
+    } else {
+      channelsFailed.push(channel);
+    }
+  });
+
+  return { channelsNotified, channelsFailed };
 }
