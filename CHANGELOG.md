@@ -5,7 +5,7 @@ All notable changes to PriceGhost will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.3] - 2026-01-23
+## [1.0.3] - 2026-01-24
 
 ### Added
 
@@ -16,6 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Tracks price drops, target price alerts, and back-in-stock notifications
   - Shows which channels (Telegram, Discord, Pushover, ntfy) received each notification
   - Links to product detail pages from notification entries
+  - **Clear button** to dismiss notifications from dropdown without deleting history
+- **Star History chart** in README to track repository stars over time
+
+### Fixed
+
+- **Notification crash with string prices** - Fixed TypeError when notification prices were returned as strings from PostgreSQL
+
+### Changed
+
+- **Settings page layout** - Moved version info, changelog, and GitHub links to sidebar under navigation
 
 ---
 
@@ -128,7 +138,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Description |
 |---------|------|-------------|
-| 1.0.3 | 2026-01-23 | Notification history with bell icon dropdown and full history page |
+| 1.0.3 | 2026-01-24 | Notification history with bell icon, clear button, and full history page |
 | 1.0.2 | 2026-01-23 | Fixed stock status false positives for in-stock items |
 | 1.0.1 | 2026-01-23 | Bug fixes, JS-rendered price support, pre-order detection |
 | 1.0.0 | 2026-01-23 | Initial public release |
