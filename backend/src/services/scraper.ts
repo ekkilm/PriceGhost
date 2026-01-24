@@ -1295,12 +1295,27 @@ export async function scrapeProductWithVoting(
 
   let html: string = '';
 
+  // Sites known to require JavaScript rendering
+  const jsHeavySites = [
+    /bestbuy\.com/i,
+    /target\.com/i,
+    /walmart\.com/i,
+    /costco\.com/i,
+  ];
+  const requiresBrowser = jsHeavySites.some(pattern => pattern.test(url));
+
   try {
     let usedBrowser = false;
 
-    // Fetch HTML
-    try {
-      const response = await axios.get<string>(url, {
+    // For JS-heavy sites, go straight to browser
+    if (requiresBrowser) {
+      console.log(`[Voting] ${new URL(url).hostname} requires browser rendering, using Puppeteer...`);
+      html = await scrapeWithBrowser(url);
+      usedBrowser = true;
+    } else {
+      // Fetch HTML
+      try {
+        const response = await axios.get<string>(url, {
         headers: {
           'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
@@ -1323,13 +1338,14 @@ export async function scrapeProductWithVoting(
         maxRedirects: 5,
       });
       html = response.data;
-    } catch (axiosError) {
-      if (axiosError instanceof AxiosError && axiosError.response?.status === 403) {
-        console.log(`[Voting] HTTP blocked (403) for ${url}, using browser...`);
-        html = await scrapeWithBrowser(url);
-        usedBrowser = true;
-      } else {
-        throw axiosError;
+      } catch (axiosError) {
+        if (axiosError instanceof AxiosError && axiosError.response?.status === 403) {
+          console.log(`[Voting] HTTP blocked (403) for ${url}, using browser...`);
+          html = await scrapeWithBrowser(url);
+          usedBrowser = true;
+        } else {
+          throw axiosError;
+        }
       }
     }
 

@@ -89,24 +89,40 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    // If needsReview is true and there are multiple candidates, return them for user selection
-    if (scrapedData.needsReview && scrapedData.priceCandidates.length > 1) {
-      res.status(200).json({
-        needsReview: true,
-        name: scrapedData.name,
-        imageUrl: scrapedData.imageUrl,
-        stockStatus: scrapedData.stockStatus,
-        priceCandidates: scrapedData.priceCandidates.map(c => ({
-          price: c.price,
-          currency: c.currency,
-          method: c.method,
-          context: c.context,
-          confidence: c.confidence,
-        })),
-        suggestedPrice: scrapedData.price,
-        url,
-      });
-      return;
+    // Always show price selection modal when adding a product so user can verify
+    // Show if we have at least one candidate with a price
+    if (scrapedData.priceCandidates.length > 0 || scrapedData.price) {
+      // Make sure we have at least one candidate to show
+      const candidates = scrapedData.priceCandidates.length > 0
+        ? scrapedData.priceCandidates
+        : scrapedData.price
+          ? [{
+              price: scrapedData.price.price,
+              currency: scrapedData.price.currency,
+              method: scrapedData.selectedMethod || 'ai' as const,
+              context: 'Extracted price',
+              confidence: 0.8
+            }]
+          : [];
+
+      if (candidates.length > 0) {
+        res.status(200).json({
+          needsReview: true,
+          name: scrapedData.name,
+          imageUrl: scrapedData.imageUrl,
+          stockStatus: scrapedData.stockStatus,
+          priceCandidates: candidates.map(c => ({
+            price: c.price,
+            currency: c.currency,
+            method: c.method,
+            context: c.context,
+            confidence: c.confidence,
+          })),
+          suggestedPrice: scrapedData.price,
+          url,
+        });
+        return;
+      }
     }
 
     // Create product with stock status

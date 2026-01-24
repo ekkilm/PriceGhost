@@ -265,9 +265,13 @@ export default function PriceSelectionModal({
 
       <div className="price-modal">
         <div className="price-modal-header">
-          <h2 className="price-modal-title">Multiple Prices Found</h2>
+          <h2 className="price-modal-title">
+            {candidates.length > 1 ? 'Multiple Prices Found' : 'Confirm Price'}
+          </h2>
           <p className="price-modal-subtitle">
-            We found different prices for this product. Please select the correct one.
+            {candidates.length > 1
+              ? 'We found different prices for this product. Please select the correct one.'
+              : 'Please verify this is the correct price for the product.'}
           </p>
         </div>
 
