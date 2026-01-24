@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { productQueries, priceHistoryQueries, stockStatusHistoryQueries } from '../models';
-import { scrapeProduct } from '../services/scraper';
+import { scrapeProduct, scrapeProductWithVoting, ExtractionMethod } from '../services/scraper';
 
 const router = Router();
 
@@ -20,11 +20,11 @@ router.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// Add a new product to track
+// Add a new product to track (with multi-strategy voting)
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!;
-    const { url, refresh_interval } = req.body;
+    const { url, refresh_interval, selectedPrice, selectedMethod } = req.body;
 
     if (!url) {
       res.status(400).json({ error: 'URL is required' });
@@ -39,13 +39,72 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    // Scrape product info (pass userId for AI fallback)
-    const scrapedData = await scrapeProduct(url, userId);
+    // If user is confirming a price selection, use the old scraper with their choice
+    if (selectedPrice !== undefined && selectedMethod) {
+      // User has selected a price from candidates - use it directly
+      const scrapedData = await scrapeProduct(url, userId);
+
+      // Create product with the user-selected price
+      const product = await productQueries.create(
+        userId,
+        url,
+        scrapedData.name,
+        scrapedData.imageUrl,
+        refresh_interval || 3600,
+        scrapedData.stockStatus
+      );
+
+      // Store the preferred extraction method and the user-selected price
+      await productQueries.updateExtractionMethod(product.id, selectedMethod);
+
+      // Record the user-selected price
+      await priceHistoryQueries.create(
+        product.id,
+        selectedPrice,
+        'USD', // TODO: Get currency from selection
+        null
+      );
+
+      // Record initial stock status
+      if (scrapedData.stockStatus !== 'unknown') {
+        await stockStatusHistoryQueries.recordChange(product.id, scrapedData.stockStatus);
+      }
+
+      // Update last_checked timestamp
+      await productQueries.updateLastChecked(product.id, product.refresh_interval);
+
+      const productWithPrice = await productQueries.findById(product.id, userId);
+      res.status(201).json(productWithPrice);
+      return;
+    }
+
+    // Use multi-strategy voting scraper
+    const scrapedData = await scrapeProductWithVoting(url, userId);
 
     // Allow adding out-of-stock products, but require a price for in-stock ones
     if (!scrapedData.price && scrapedData.stockStatus !== 'out_of_stock') {
       res.status(400).json({
         error: 'Could not extract price from the provided URL',
+      });
+      return;
+    }
+
+    // If needsReview is true and there are multiple candidates, return them for user selection
+    if (scrapedData.needsReview && scrapedData.priceCandidates.length > 1) {
+      res.status(200).json({
+        needsReview: true,
+        name: scrapedData.name,
+        imageUrl: scrapedData.imageUrl,
+        stockStatus: scrapedData.stockStatus,
+        priceCandidates: scrapedData.priceCandidates.map(c => ({
+          price: c.price,
+          currency: c.currency,
+          method: c.method,
+          context: c.context,
+          confidence: c.confidence,
+        })),
+        suggestedPrice: scrapedData.price,
+        url,
       });
       return;
     }
@@ -59,6 +118,11 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       refresh_interval || 3600,
       scrapedData.stockStatus
     );
+
+    // Store the extraction method that worked
+    if (scrapedData.selectedMethod) {
+      await productQueries.updateExtractionMethod(product.id, scrapedData.selectedMethod);
+    }
 
     // Record initial price if available
     if (scrapedData.price) {

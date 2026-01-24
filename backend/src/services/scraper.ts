@@ -13,6 +13,220 @@ puppeteer.use(StealthPlugin());
 
 export type StockStatus = 'in_stock' | 'out_of_stock' | 'unknown';
 
+// Extraction method types for multi-strategy voting
+export type ExtractionMethod = 'json-ld' | 'site-specific' | 'generic-css' | 'ai';
+
+// Price candidate from a single extraction method
+export interface PriceCandidate {
+  price: number;
+  currency: string;
+  method: ExtractionMethod;
+  context?: string; // Text around the price for user context
+  confidence: number; // 0-1 confidence score
+}
+
+// Extended scrape result with candidates for voting
+export interface ScrapedProductWithCandidates {
+  name: string | null;
+  price: ParsedPrice | null;
+  imageUrl: string | null;
+  url: string;
+  stockStatus: StockStatus;
+  aiStatus: 'verified' | 'corrected' | null;
+  priceCandidates: PriceCandidate[];
+  needsReview: boolean;
+  selectedMethod?: ExtractionMethod; // Which method was used for final price
+}
+
+// Check if two prices are "close enough" to be considered the same (within 5%)
+function pricesMatch(price1: number, price2: number): boolean {
+  if (price1 === price2) return true;
+  const diff = Math.abs(price1 - price2);
+  const avg = (price1 + price2) / 2;
+  return (diff / avg) < 0.05; // Within 5%
+}
+
+// Find consensus among price candidates
+function findPriceConsensus(candidates: PriceCandidate[]): { price: PriceCandidate | null; hasConsensus: boolean; groups: PriceCandidate[][] } {
+  if (candidates.length === 0) return { price: null, hasConsensus: false, groups: [] };
+  if (candidates.length === 1) return { price: candidates[0], hasConsensus: true, groups: [[candidates[0]]] };
+
+  // Group prices that match
+  const groups: PriceCandidate[][] = [];
+  for (const candidate of candidates) {
+    let foundGroup = false;
+    for (const group of groups) {
+      if (pricesMatch(candidate.price, group[0].price)) {
+        group.push(candidate);
+        foundGroup = true;
+        break;
+      }
+    }
+    if (!foundGroup) {
+      groups.push([candidate]);
+    }
+  }
+
+  // Sort groups by size (most votes first), then by confidence
+  groups.sort((a, b) => {
+    if (b.length !== a.length) return b.length - a.length;
+    const avgConfA = a.reduce((sum, c) => sum + c.confidence, 0) / a.length;
+    const avgConfB = b.reduce((sum, c) => sum + c.confidence, 0) / b.length;
+    return avgConfB - avgConfA;
+  });
+
+  const largestGroup = groups[0];
+  // Consensus if majority agrees (>= 50% of methods) OR if top group has significantly more votes
+  const hasConsensus = largestGroup.length >= Math.ceil(candidates.length / 2) ||
+                       (groups.length > 1 && largestGroup.length > groups[1].length);
+
+  // Pick the highest confidence candidate from the winning group
+  const winner = largestGroup.sort((a, b) => b.confidence - a.confidence)[0];
+
+  return { price: winner, hasConsensus, groups };
+}
+
+// Extract price candidates from JSON-LD structured data
+function extractJsonLdCandidates($: CheerioAPI): PriceCandidate[] {
+  const candidates: PriceCandidate[] = [];
+  try {
+    const scripts = $('script[type="application/ld+json"]');
+    for (let i = 0; i < scripts.length; i++) {
+      const content = $(scripts[i]).html();
+      if (!content) continue;
+
+      const data = JSON.parse(content) as JsonLdProduct | JsonLdProduct[];
+      const product = findProduct(data);
+
+      if (product?.offers) {
+        const offer = Array.isArray(product.offers) ? product.offers[0] : product.offers;
+        const priceValue = offer.lowPrice || offer.price || offer.priceSpecification?.price;
+        const currency = offer.priceCurrency || offer.priceSpecification?.priceCurrency || 'USD';
+
+        if (priceValue) {
+          const price = parseFloat(String(priceValue));
+          if (!isNaN(price) && price > 0) {
+            candidates.push({
+              price,
+              currency,
+              method: 'json-ld',
+              context: `Structured data: ${product.name || 'Product'}`,
+              confidence: 0.9, // JSON-LD is highly reliable
+            });
+          }
+        }
+      }
+    }
+  } catch (_e) {
+    // JSON parse error
+  }
+  return candidates;
+}
+
+// Extract price candidates from site-specific scraper
+function extractSiteSpecificCandidates($: CheerioAPI, url: string): { candidates: PriceCandidate[]; name: string | null; imageUrl: string | null; stockStatus: StockStatus } {
+  const candidates: PriceCandidate[] = [];
+  let name: string | null = null;
+  let imageUrl: string | null = null;
+  let stockStatus: StockStatus = 'unknown';
+
+  const siteScraper = siteScrapers.find((s) => s.match(url));
+  if (siteScraper) {
+    const siteResult = siteScraper.scrape($, url);
+    if (siteResult.price) {
+      candidates.push({
+        price: siteResult.price.price,
+        currency: siteResult.price.currency,
+        method: 'site-specific',
+        context: `Site-specific extractor for ${new URL(url).hostname}`,
+        confidence: 0.85, // Site-specific scrapers are well-tested
+      });
+    }
+    name = siteResult.name || null;
+    imageUrl = siteResult.imageUrl || null;
+    stockStatus = siteResult.stockStatus || 'unknown';
+  }
+
+  return { candidates, name, imageUrl, stockStatus };
+}
+
+// Extract price candidates from generic CSS selectors
+function extractGenericCssCandidates($: CheerioAPI): PriceCandidate[] {
+  const candidates: PriceCandidate[] = [];
+  const seen = new Set<number>();
+
+  for (const selector of genericPriceSelectors) {
+    const elements = $(selector);
+    elements.each((_, el) => {
+      const $el = $(el);
+      // Skip if this looks like an "original" or "was" price
+      const classAttr = $el.attr('class') || '';
+      const parentClass = $el.parent().attr('class') || '';
+      if (/original|was|old|regular|compare|strikethrough|line-through/i.test(classAttr + parentClass)) {
+        return;
+      }
+
+      // Check various attributes where price might be stored
+      const priceAmount = $el.attr('data-price-amount');
+      const dataPrice = $el.attr('data-price');
+      const content = $el.attr('content');
+      const text = $el.text();
+
+      let parsed: ParsedPrice | null = null;
+      let context = selector;
+
+      // Try data-price-amount first (Magento stores numeric value here)
+      if (priceAmount) {
+        const price = parseFloat(priceAmount);
+        if (!isNaN(price) && price > 0) {
+          let currency = 'USD';
+          const textSources = [text, $el.parent().text(), $el.closest('.price-box').text()];
+          for (const source of textSources) {
+            if (!source) continue;
+            const currencyCodeMatch = source.match(/\b(CHF|EUR|GBP|USD|CAD|AUD|JPY|INR)\b/i);
+            if (currencyCodeMatch) {
+              currency = currencyCodeMatch[1].toUpperCase();
+              break;
+            }
+            const symbolMatch = source.match(/([$€£¥₹])/);
+            if (symbolMatch) {
+              const symbolMap: Record<string, string> = { '$': 'USD', '€': 'EUR', '£': 'GBP', '¥': 'JPY', '₹': 'INR' };
+              currency = symbolMap[symbolMatch[1]] || 'USD';
+              break;
+            }
+          }
+          parsed = { price, currency };
+          context = `data-price-amount attribute`;
+        }
+      }
+
+      if (!parsed) {
+        const priceStr = content || dataPrice || text;
+        parsed = parsePrice(priceStr);
+        if (parsed) {
+          context = text.trim().slice(0, 50);
+        }
+      }
+
+      if (parsed && parsed.price > 0 && !seen.has(parsed.price)) {
+        seen.add(parsed.price);
+        candidates.push({
+          price: parsed.price,
+          currency: parsed.currency,
+          method: 'generic-css',
+          context,
+          confidence: 0.6, // Generic CSS is less reliable
+        });
+      }
+    });
+
+    // Only take first few generic candidates to avoid noise
+    if (candidates.length >= 3) break;
+  }
+
+  return candidates;
+}
+
 // Browser-based scraping for sites that block HTTP requests (e.g., Cloudflare)
 async function scrapeWithBrowser(url: string): Promise<string> {
   const browser = await puppeteer.launch({
@@ -1054,6 +1268,287 @@ export async function scrapeProduct(url: string, userId?: number): Promise<Scrap
     }
   } catch (error) {
     console.error(`Error scraping ${url}:`, error);
+  }
+
+  return result;
+}
+
+/**
+ * Multi-strategy voting scraper with user review support.
+ * Runs all extraction methods, finds consensus, and flags ambiguous cases for user review.
+ */
+export async function scrapeProductWithVoting(
+  url: string,
+  userId?: number,
+  preferredMethod?: ExtractionMethod
+): Promise<ScrapedProductWithCandidates> {
+  const result: ScrapedProductWithCandidates = {
+    name: null,
+    price: null,
+    imageUrl: null,
+    url,
+    stockStatus: 'unknown',
+    aiStatus: null,
+    priceCandidates: [],
+    needsReview: false,
+  };
+
+  let html: string = '';
+
+  try {
+    let usedBrowser = false;
+
+    // Fetch HTML
+    try {
+      const response = await axios.get<string>(url, {
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+          Accept:
+            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+          'Sec-Ch-Ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+          'Sec-Ch-Ua-Mobile': '?0',
+          'Sec-Ch-Ua-Platform': '"Windows"',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none',
+          'Sec-Fetch-User': '?1',
+          'Upgrade-Insecure-Requests': '1',
+        },
+        timeout: 20000,
+        maxRedirects: 5,
+      });
+      html = response.data;
+    } catch (axiosError) {
+      if (axiosError instanceof AxiosError && axiosError.response?.status === 403) {
+        console.log(`[Voting] HTTP blocked (403) for ${url}, using browser...`);
+        html = await scrapeWithBrowser(url);
+        usedBrowser = true;
+      } else {
+        throw axiosError;
+      }
+    }
+
+    let $ = load(html);
+
+    // Collect candidates from all methods
+    const allCandidates: PriceCandidate[] = [];
+
+    // 1. JSON-LD extraction (highest reliability)
+    const jsonLdCandidates = extractJsonLdCandidates($);
+    allCandidates.push(...jsonLdCandidates);
+    console.log(`[Voting] JSON-LD found ${jsonLdCandidates.length} candidates`);
+
+    // 2. Site-specific extraction
+    const siteResult = extractSiteSpecificCandidates($, url);
+    allCandidates.push(...siteResult.candidates);
+    if (siteResult.name) result.name = siteResult.name;
+    if (siteResult.imageUrl) result.imageUrl = siteResult.imageUrl;
+    if (siteResult.stockStatus !== 'unknown') result.stockStatus = siteResult.stockStatus;
+    console.log(`[Voting] Site-specific found ${siteResult.candidates.length} candidates`);
+
+    // 3. Generic CSS extraction
+    const genericCandidates = extractGenericCssCandidates($);
+    allCandidates.push(...genericCandidates);
+    console.log(`[Voting] Generic CSS found ${genericCandidates.length} candidates`);
+
+    // If no candidates found in static HTML, try browser rendering
+    if (allCandidates.length === 0 && !usedBrowser) {
+      console.log(`[Voting] No candidates in static HTML, trying browser...`);
+      try {
+        html = await scrapeWithBrowser(url);
+        usedBrowser = true;
+        $ = load(html);
+
+        // Re-run all extraction methods
+        allCandidates.push(...extractJsonLdCandidates($));
+        const browserSiteResult = extractSiteSpecificCandidates($, url);
+        allCandidates.push(...browserSiteResult.candidates);
+        if (!result.name && browserSiteResult.name) result.name = browserSiteResult.name;
+        if (!result.imageUrl && browserSiteResult.imageUrl) result.imageUrl = browserSiteResult.imageUrl;
+        if (result.stockStatus === 'unknown' && browserSiteResult.stockStatus !== 'unknown') {
+          result.stockStatus = browserSiteResult.stockStatus;
+        }
+        allCandidates.push(...extractGenericCssCandidates($));
+        console.log(`[Voting] Browser found ${allCandidates.length} total candidates`);
+      } catch (browserError) {
+        console.error(`[Voting] Browser fallback failed:`, browserError);
+      }
+    }
+
+    // Fill in missing metadata
+    if (!result.name) {
+      result.name = extractGenericName($) || $('meta[property="og:title"]').attr('content') || null;
+    }
+    if (!result.imageUrl) {
+      result.imageUrl = extractGenericImage($, url) || $('meta[property="og:image"]').attr('content') || null;
+    }
+    if (result.stockStatus === 'unknown') {
+      result.stockStatus = extractGenericStockStatus($);
+    }
+
+    // Store all candidates
+    result.priceCandidates = allCandidates;
+
+    // If user has a preferred method, try to use it
+    if (preferredMethod && allCandidates.length > 0) {
+      const preferredCandidate = allCandidates.find(c => c.method === preferredMethod);
+      if (preferredCandidate) {
+        console.log(`[Voting] Using preferred method ${preferredMethod}: ${preferredCandidate.price}`);
+        result.price = { price: preferredCandidate.price, currency: preferredCandidate.currency };
+        result.selectedMethod = preferredMethod;
+        return result;
+      }
+    }
+
+    // Find consensus
+    const { price: consensusPrice, hasConsensus, groups } = findPriceConsensus(allCandidates);
+    console.log(`[Voting] Consensus: ${hasConsensus}, Groups: ${groups.length}, Winner: ${consensusPrice?.price}`);
+
+    if (hasConsensus && consensusPrice) {
+      // Clear consensus - use the winning price
+      result.price = { price: consensusPrice.price, currency: consensusPrice.currency };
+      result.selectedMethod = consensusPrice.method;
+      console.log(`[Voting] Consensus price: ${consensusPrice.price} via ${consensusPrice.method}`);
+    } else if (allCandidates.length > 0) {
+      // No consensus - try AI arbitration if available
+      if (userId && html) {
+        console.log(`[Voting] No consensus, trying AI arbitration...`);
+        try {
+          const { tryAIArbitration } = await import('./ai-extractor');
+          const aiResult = await tryAIArbitration(url, html, allCandidates, userId);
+
+          if (aiResult && aiResult.selectedPrice) {
+            console.log(`[Voting] AI selected price: ${aiResult.selectedPrice.price} (reason: ${aiResult.reason})`);
+            result.price = { price: aiResult.selectedPrice.price, currency: aiResult.selectedPrice.currency };
+            result.selectedMethod = aiResult.selectedPrice.method;
+            result.aiStatus = 'verified';
+
+            // Add AI as a candidate for transparency
+            if (!allCandidates.find(c => c.method === 'ai')) {
+              result.priceCandidates.push({
+                price: aiResult.selectedPrice.price,
+                currency: aiResult.selectedPrice.currency,
+                method: 'ai',
+                context: `AI arbitration: ${aiResult.reason}`,
+                confidence: aiResult.confidence || 0.8,
+              });
+            }
+          } else {
+            // AI couldn't decide either - flag for user review
+            console.log(`[Voting] AI couldn't decide, flagging for user review`);
+            result.needsReview = true;
+            // Use the most confident candidate as default
+            const bestCandidate = allCandidates.sort((a, b) => b.confidence - a.confidence)[0];
+            result.price = { price: bestCandidate.price, currency: bestCandidate.currency };
+            result.selectedMethod = bestCandidate.method;
+          }
+        } catch (aiError) {
+          console.error(`[Voting] AI arbitration failed:`, aiError);
+          // Fall back to flagging for user review
+          result.needsReview = true;
+          const bestCandidate = allCandidates.sort((a, b) => b.confidence - a.confidence)[0];
+          result.price = { price: bestCandidate.price, currency: bestCandidate.currency };
+          result.selectedMethod = bestCandidate.method;
+        }
+      } else {
+        // No AI available - flag for user review if multiple prices differ significantly
+        if (groups.length > 1) {
+          result.needsReview = true;
+          console.log(`[Voting] Multiple price groups found, flagging for user review`);
+        }
+        // Use the most confident candidate as default
+        const bestCandidate = allCandidates.sort((a, b) => b.confidence - a.confidence)[0];
+        result.price = { price: bestCandidate.price, currency: bestCandidate.currency };
+        result.selectedMethod = bestCandidate.method;
+      }
+    } else {
+      // No candidates at all - try pure AI extraction
+      if (userId && html) {
+        console.log(`[Voting] No candidates found, trying AI extraction...`);
+        try {
+          const { tryAIExtraction } = await import('./ai-extractor');
+          const aiResult = await tryAIExtraction(url, html, userId);
+
+          if (aiResult && aiResult.price && aiResult.confidence > 0.5) {
+            console.log(`[Voting] AI extracted price: ${aiResult.price.price}`);
+            result.price = aiResult.price;
+            result.selectedMethod = 'ai';
+            result.priceCandidates.push({
+              price: aiResult.price.price,
+              currency: aiResult.price.currency,
+              method: 'ai',
+              context: 'AI extraction (no other methods found price)',
+              confidence: aiResult.confidence,
+            });
+            if (!result.name && aiResult.name) result.name = aiResult.name;
+            if (!result.imageUrl && aiResult.imageUrl) result.imageUrl = aiResult.imageUrl;
+            if (result.stockStatus === 'unknown' && aiResult.stockStatus !== 'unknown') {
+              result.stockStatus = aiResult.stockStatus;
+            }
+          }
+        } catch (aiError) {
+          console.error(`[Voting] AI extraction failed:`, aiError);
+        }
+      }
+    }
+
+    // If we have a price but AI is available, verify it
+    if (result.price && userId && html && !result.aiStatus) {
+      try {
+        const { tryAIVerification } = await import('./ai-extractor');
+        const verifyResult = await tryAIVerification(
+          url,
+          html,
+          result.price.price,
+          result.price.currency,
+          userId
+        );
+
+        if (verifyResult) {
+          if (verifyResult.isCorrect) {
+            result.aiStatus = 'verified';
+          } else if (verifyResult.suggestedPrice && verifyResult.confidence > 0.7) {
+            // AI suggests a different price - this might indicate we need review
+            const existingCandidate = allCandidates.find(c =>
+              pricesMatch(c.price, verifyResult.suggestedPrice!.price)
+            );
+            if (existingCandidate) {
+              // AI agrees with one of our candidates - use that
+              result.price = verifyResult.suggestedPrice;
+              result.selectedMethod = existingCandidate.method;
+              result.aiStatus = 'corrected';
+            } else if (!result.needsReview) {
+              // AI suggests a price we didn't find - flag for review
+              result.needsReview = true;
+              result.priceCandidates.push({
+                price: verifyResult.suggestedPrice.price,
+                currency: verifyResult.suggestedPrice.currency,
+                method: 'ai',
+                context: `AI suggestion: ${verifyResult.reason}`,
+                confidence: verifyResult.confidence,
+              });
+            }
+          }
+
+          // Update stock status from AI
+          if (verifyResult.stockStatus && verifyResult.stockStatus !== 'unknown') {
+            if (result.stockStatus === 'unknown' || verifyResult.stockStatus === 'out_of_stock') {
+              result.stockStatus = verifyResult.stockStatus;
+            }
+          }
+        }
+      } catch (verifyError) {
+        console.error(`[Voting] AI verification failed:`, verifyError);
+      }
+    }
+
+  } catch (error) {
+    console.error(`[Voting] Error scraping ${url}:`, error);
   }
 
   return result;

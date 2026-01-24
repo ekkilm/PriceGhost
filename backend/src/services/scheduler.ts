@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { productQueries, priceHistoryQueries, userQueries, stockStatusHistoryQueries, notificationHistoryQueries, NotificationType } from '../models';
-import { scrapeProduct } from './scraper';
+import { scrapeProduct, scrapeProductWithVoting, ExtractionMethod } from './scraper';
 import { sendNotifications, NotificationPayload } from './notifications';
 
 let isRunning = false;
@@ -23,7 +23,15 @@ async function checkPrices(): Promise<void> {
       try {
         console.log(`Checking price for product ${product.id}: ${product.url}`);
 
-        const scrapedData = await scrapeProduct(product.url, product.user_id);
+        // Get preferred extraction method for this product (if user previously selected one)
+        const preferredMethod = await productQueries.getPreferredExtractionMethod(product.id);
+
+        // Use voting scraper with preferred method if available
+        const scrapedData = await scrapeProductWithVoting(
+          product.url,
+          product.user_id,
+          preferredMethod as ExtractionMethod | undefined
+        );
 
         // Check for back-in-stock notification
         const wasOutOfStock = product.stock_status === 'out_of_stock';

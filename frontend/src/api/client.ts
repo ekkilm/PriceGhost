@@ -83,6 +83,27 @@ export interface ProductWithStats extends Product {
   } | null;
 }
 
+// Response when product needs price review
+export interface PriceCandidate {
+  price: number;
+  currency: string;
+  method: string;
+  context?: string;
+  confidence: number;
+}
+
+export interface PriceReviewResponse {
+  needsReview: true;
+  name: string | null;
+  imageUrl: string | null;
+  stockStatus: string;
+  priceCandidates: PriceCandidate[];
+  suggestedPrice: { price: number; currency: string } | null;
+  url: string;
+}
+
+export type CreateProductResponse = Product | PriceReviewResponse;
+
 export interface PriceHistory {
   id: number;
   product_id: number;
@@ -96,8 +117,13 @@ export const productsApi = {
 
   getById: (id: number) => api.get<ProductWithStats>(`/products/${id}`),
 
-  create: (url: string, refreshInterval?: number) =>
-    api.post<Product>('/products', { url, refresh_interval: refreshInterval }),
+  create: (url: string, refreshInterval?: number, selectedPrice?: number, selectedMethod?: string) =>
+    api.post<CreateProductResponse>('/products', {
+      url,
+      refresh_interval: refreshInterval,
+      selectedPrice,
+      selectedMethod,
+    }),
 
   update: (id: number, data: {
     name?: string;

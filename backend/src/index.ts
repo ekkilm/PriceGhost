@@ -151,6 +151,22 @@ async function runMigrations() {
       END $$;
     `);
 
+    // Add multi-strategy voting columns to products table
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'preferred_extraction_method') THEN
+          ALTER TABLE products ADD COLUMN preferred_extraction_method VARCHAR(20);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'needs_price_review') THEN
+          ALTER TABLE products ADD COLUMN needs_price_review BOOLEAN DEFAULT false;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'price_candidates') THEN
+          ALTER TABLE products ADD COLUMN price_candidates JSONB;
+        END IF;
+      END $$;
+    `);
+
     // Create notification_history table for tracking all triggered notifications
     await client.query(`
       CREATE TABLE IF NOT EXISTS notification_history (

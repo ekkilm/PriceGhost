@@ -4,7 +4,7 @@ import axios from 'axios';
 import { load } from 'cheerio';
 import { AISettings } from '../models';
 import { ParsedPrice } from '../utils/priceParser';
-import { StockStatus } from './scraper';
+import { StockStatus, PriceCandidate } from './scraper';
 
 export interface AIExtractionResult {
   name: string | null;
@@ -545,6 +545,214 @@ export async function tryAIVerification(
     return null;
   } catch (error) {
     console.error(`[AI Verify] Verification failed for ${url}:`, error);
+    return null;
+  }
+}
+
+// Arbitration prompt for when multiple extraction methods disagree
+const ARBITRATION_PROMPT = `You are a price arbitration assistant. Multiple price extraction methods found different prices for the same product. Help determine the correct price.
+
+Found prices:
+$CANDIDATES$
+
+Analyze the HTML content below and determine which price is the correct CURRENT selling price for the main product.
+
+Consider:
+- JSON-LD structured data is usually highly reliable (schema.org standard)
+- Site-specific extractors are well-tested for major retailers
+- Generic CSS selectors might catch wrong prices (shipping, savings, bundles, etc.)
+- Look for the price that appears in the main product display area
+- Ignore crossed-out/original prices, shipping costs, subscription prices, or bundle prices
+
+Return a JSON object with:
+- selectedIndex: the 0-based index of the correct price from the list above
+- confidence: your confidence from 0 to 1
+- reason: brief explanation of why this price is correct
+
+Only return valid JSON, no explanation text outside the JSON.
+
+HTML Content:
+`;
+
+export interface AIArbitrationResult {
+  selectedPrice: PriceCandidate | null;
+  confidence: number;
+  reason: string;
+}
+
+async function arbitrateWithAnthropic(
+  html: string,
+  candidates: PriceCandidate[],
+  apiKey: string
+): Promise<AIArbitrationResult> {
+  const anthropic = new Anthropic({ apiKey });
+
+  const candidatesList = candidates.map((c, i) =>
+    `${i}. ${c.price} ${c.currency} (method: ${c.method}, context: ${c.context || 'none'})`
+  ).join('\n');
+
+  const preparedHtml = prepareHtmlForAI(html);
+  const prompt = ARBITRATION_PROMPT.replace('$CANDIDATES$', candidatesList) + preparedHtml;
+
+  const response = await anthropic.messages.create({
+    model: 'claude-3-haiku-20240307',
+    max_tokens: 512,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const content = response.content[0];
+  if (content.type !== 'text') {
+    throw new Error('Unexpected response type from Anthropic');
+  }
+
+  return parseArbitrationResponse(content.text, candidates);
+}
+
+async function arbitrateWithOpenAI(
+  html: string,
+  candidates: PriceCandidate[],
+  apiKey: string
+): Promise<AIArbitrationResult> {
+  const openai = new OpenAI({ apiKey });
+
+  const candidatesList = candidates.map((c, i) =>
+    `${i}. ${c.price} ${c.currency} (method: ${c.method}, context: ${c.context || 'none'})`
+  ).join('\n');
+
+  const preparedHtml = prepareHtmlForAI(html);
+  const prompt = ARBITRATION_PROMPT.replace('$CANDIDATES$', candidatesList) + preparedHtml;
+
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    max_tokens: 512,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) {
+    throw new Error('No response from OpenAI');
+  }
+
+  return parseArbitrationResponse(content, candidates);
+}
+
+async function arbitrateWithOllama(
+  html: string,
+  candidates: PriceCandidate[],
+  baseUrl: string,
+  model: string
+): Promise<AIArbitrationResult> {
+  const candidatesList = candidates.map((c, i) =>
+    `${i}. ${c.price} ${c.currency} (method: ${c.method}, context: ${c.context || 'none'})`
+  ).join('\n');
+
+  const preparedHtml = prepareHtmlForAI(html);
+  const prompt = ARBITRATION_PROMPT.replace('$CANDIDATES$', candidatesList) + preparedHtml;
+
+  const response = await axios.post(
+    `${baseUrl}/api/chat`,
+    {
+      model: model,
+      messages: [{ role: 'user', content: prompt }],
+      stream: false,
+    },
+    {
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 120000,
+    }
+  );
+
+  const content = response.data?.message?.content;
+  if (!content) {
+    throw new Error('No response from Ollama');
+  }
+
+  return parseArbitrationResponse(content, candidates);
+}
+
+function parseArbitrationResponse(
+  responseText: string,
+  candidates: PriceCandidate[]
+): AIArbitrationResult {
+  console.log(`[AI Arbitrate] Raw response: ${responseText.substring(0, 500)}...`);
+
+  const defaultResult: AIArbitrationResult = {
+    selectedPrice: null,
+    confidence: 0,
+    reason: 'Could not parse AI response',
+  };
+
+  let jsonStr = responseText.trim();
+
+  // Handle markdown code blocks
+  const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (jsonMatch) {
+    jsonStr = jsonMatch[1].trim();
+  }
+
+  // Try to find JSON object
+  const objectMatch = jsonStr.match(/\{[\s\S]*\}/);
+  if (objectMatch) {
+    jsonStr = objectMatch[0];
+  }
+
+  try {
+    const data = JSON.parse(jsonStr);
+    console.log(`[AI Arbitrate] Parsed:`, JSON.stringify(data, null, 2));
+
+    const selectedIndex = data.selectedIndex;
+    if (typeof selectedIndex === 'number' && selectedIndex >= 0 && selectedIndex < candidates.length) {
+      return {
+        selectedPrice: candidates[selectedIndex],
+        confidence: data.confidence ?? 0.7,
+        reason: data.reason || 'AI selected this price',
+      };
+    }
+
+    return defaultResult;
+  } catch (error) {
+    console.error('[AI Arbitrate] Failed to parse response:', responseText);
+    return defaultResult;
+  }
+}
+
+// Export for use in voting scraper to arbitrate between disagreeing methods
+export async function tryAIArbitration(
+  url: string,
+  html: string,
+  candidates: PriceCandidate[],
+  userId: number
+): Promise<AIArbitrationResult | null> {
+  try {
+    const { userQueries } = await import('../models');
+    const settings = await userQueries.getAISettings(userId);
+
+    // Need AI enabled for arbitration
+    if (!settings?.ai_enabled && !settings?.ai_verification_enabled) {
+      return null;
+    }
+
+    // Need at least 2 candidates to arbitrate
+    if (candidates.length < 2) {
+      return null;
+    }
+
+    // Use the configured provider
+    if (settings.ai_provider === 'anthropic' && settings.anthropic_api_key) {
+      console.log(`[AI Arbitrate] Using Anthropic to arbitrate ${candidates.length} prices for ${url}`);
+      return await arbitrateWithAnthropic(html, candidates, settings.anthropic_api_key);
+    } else if (settings.ai_provider === 'openai' && settings.openai_api_key) {
+      console.log(`[AI Arbitrate] Using OpenAI to arbitrate ${candidates.length} prices for ${url}`);
+      return await arbitrateWithOpenAI(html, candidates, settings.openai_api_key);
+    } else if (settings.ai_provider === 'ollama' && settings.ollama_base_url && settings.ollama_model) {
+      console.log(`[AI Arbitrate] Using Ollama to arbitrate ${candidates.length} prices for ${url}`);
+      return await arbitrateWithOllama(html, candidates, settings.ollama_base_url, settings.ollama_model);
+    }
+
+    console.log(`[AI Arbitrate] No provider configured`);
+    return null;
+  } catch (error) {
+    console.error(`[AI Arbitrate] Arbitration failed for ${url}:`, error);
     return null;
   }
 }

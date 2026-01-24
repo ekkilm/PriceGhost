@@ -5,6 +5,27 @@ All notable changes to PriceGhost will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-01-24
+
+### Added
+
+- **Multi-Strategy Price Voting System** - More robust price extraction using multiple methods
+  - Runs all extraction methods (JSON-LD, site-specific, generic CSS, AI) in parallel
+  - Uses consensus voting to select the correct price when methods agree
+  - AI arbitration when extraction methods disagree
+  - User price selection dialog when price is ambiguous (multiple prices found)
+  - Remembers the winning extraction method for future checks of the same product
+- **Price Selection Modal** - When multiple prices are found for a product, users can now select the correct one
+  - Shows all price candidates with confidence levels
+  - Displays extraction method and context for each candidate
+  - Sorted by confidence (highest first)
+
+### Changed
+
+- **Improved scheduler** - Now uses preferred extraction method when available for faster, more accurate re-checks
+
+---
+
 ## [1.0.3] - 2026-01-24
 
 ### Added
@@ -141,6 +162,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Description |
 |---------|------|-------------|
+| 1.0.4 | 2026-01-24 | Multi-strategy price voting system with user selection for ambiguous prices |
 | 1.0.3 | 2026-01-24 | Notification history with bell icon, clear button, and full history page |
 | 1.0.2 | 2026-01-23 | Fixed stock status false positives for in-stock items |
 | 1.0.1 | 2026-01-23 | Bug fixes, JS-rendered price support, pre-order detection |

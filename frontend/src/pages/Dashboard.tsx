@@ -2,7 +2,13 @@ import { useState, useEffect, useMemo } from 'react';
 import Layout from '../components/Layout';
 import ProductCard from '../components/ProductCard';
 import ProductForm from '../components/ProductForm';
-import { productsApi, pricesApi, Product } from '../api/client';
+import PriceSelectionModal from '../components/PriceSelectionModal';
+import { productsApi, pricesApi, Product, PriceReviewResponse } from '../api/client';
+
+// Type guard to check if response needs review
+function isPriceReviewResponse(response: Product | PriceReviewResponse): response is PriceReviewResponse {
+  return 'needsReview' in response && response.needsReview === true;
+}
 
 type SortOption = 'date_added' | 'name' | 'price' | 'price_change' | 'website';
 type SortOrder = 'asc' | 'desc';
@@ -33,6 +39,11 @@ export default function Dashboard() {
   const [isSavingBulk, setIsSavingBulk] = useState(false);
   const [showBulkActions, setShowBulkActions] = useState(false);
 
+  // Price selection modal state
+  const [showPriceModal, setShowPriceModal] = useState(false);
+  const [priceReviewData, setPriceReviewData] = useState<PriceReviewResponse | null>(null);
+  const [pendingRefreshInterval, setPendingRefreshInterval] = useState<number>(3600);
+
   const fetchProducts = async () => {
     try {
       const response = await productsApi.getAll();
@@ -58,7 +69,40 @@ export default function Dashboard() {
 
   const handleAddProduct = async (url: string, refreshInterval: number) => {
     const response = await productsApi.create(url, refreshInterval);
-    setProducts((prev) => [response.data, ...prev]);
+
+    // Check if we need user to select a price
+    if (isPriceReviewResponse(response.data)) {
+      setPriceReviewData(response.data);
+      setPendingRefreshInterval(refreshInterval);
+      setShowPriceModal(true);
+      return; // Don't add product yet - wait for user selection
+    }
+
+    // response.data is a Product at this point
+    setProducts((prev) => [response.data as Product, ...prev]);
+  };
+
+  const handlePriceSelected = async (selectedPrice: number, selectedMethod: string) => {
+    if (!priceReviewData) return;
+
+    const response = await productsApi.create(
+      priceReviewData.url,
+      pendingRefreshInterval,
+      selectedPrice,
+      selectedMethod
+    );
+
+    // When selecting a price, the API should always return a Product
+    if (!isPriceReviewResponse(response.data)) {
+      setProducts((prev) => [response.data as Product, ...prev]);
+    }
+    setShowPriceModal(false);
+    setPriceReviewData(null);
+  };
+
+  const handlePriceModalClose = () => {
+    setShowPriceModal(false);
+    setPriceReviewData(null);
   };
 
   const handleDeleteProduct = async (id: number) => {
@@ -640,6 +684,18 @@ export default function Dashboard() {
       </div>
 
       <ProductForm onSubmit={handleAddProduct} />
+
+      {/* Price Selection Modal */}
+      <PriceSelectionModal
+        isOpen={showPriceModal}
+        onClose={handlePriceModalClose}
+        onSelect={handlePriceSelected}
+        productName={priceReviewData?.name || null}
+        imageUrl={priceReviewData?.imageUrl || null}
+        candidates={priceReviewData?.priceCandidates || []}
+        suggestedPrice={priceReviewData?.suggestedPrice || null}
+        url={priceReviewData?.url || ''}
+      />
 
       {error && <div className="alert alert-error">{error}</div>}
 

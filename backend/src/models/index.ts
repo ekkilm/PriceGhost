@@ -551,6 +551,21 @@ export const productQueries = {
     );
     return result.rows;
   },
+
+  updateExtractionMethod: async (id: number, method: string): Promise<void> => {
+    await pool.query(
+      'UPDATE products SET preferred_extraction_method = $1, needs_price_review = false WHERE id = $2',
+      [method, id]
+    );
+  },
+
+  getPreferredExtractionMethod: async (id: number): Promise<string | null> => {
+    const result = await pool.query(
+      'SELECT preferred_extraction_method FROM products WHERE id = $1',
+      [id]
+    );
+    return result.rows[0]?.preferred_extraction_method || null;
+  },
 };
 
 // Price History types and queries
