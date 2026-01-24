@@ -40,10 +40,12 @@ function getNotificationTypeLabel(type: NotificationType): string {
   }
 }
 
-function formatPrice(price: number | null, currency: string | null): string {
-  if (price === null) return '-';
+function formatPrice(price: number | string | null, currency: string | null): string {
+  if (price === null || price === undefined) return '-';
+  const numPrice = typeof price === 'string' ? parseFloat(price) : price;
+  if (isNaN(numPrice)) return '-';
   const symbol = currency === 'EUR' ? '\u20AC' : currency === 'GBP' ? '\u00A3' : currency === 'CHF' ? 'CHF ' : '$';
-  return `${symbol}${price.toFixed(2)}`;
+  return `${symbol}${numPrice.toFixed(2)}`;
 }
 
 function getChannelIcon(channel: string): string {
@@ -429,7 +431,7 @@ export default function NotificationHistory() {
                 <div>
                   {notification.price_change_percent && (
                     <span className="notification-price-change">
-                      -{Math.abs(notification.price_change_percent).toFixed(1)}%
+                      -{Math.abs(parseFloat(String(notification.price_change_percent))).toFixed(1)}%
                     </span>
                   )}
                   {notification.target_price && (

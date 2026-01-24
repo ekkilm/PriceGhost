@@ -47,10 +47,12 @@ function getNotificationTitle(notification: NotificationHistoryEntry): string {
   }
 }
 
-function formatPrice(price: number | null, currency: string | null): string {
-  if (price === null) return '';
+function formatPrice(price: number | string | null, currency: string | null): string {
+  if (price === null || price === undefined) return '';
+  const numPrice = typeof price === 'string' ? parseFloat(price) : price;
+  if (isNaN(numPrice)) return '';
   const symbol = currency === 'EUR' ? '\u20AC' : currency === 'GBP' ? '\u00A3' : '$';
-  return `${symbol}${price.toFixed(2)}`;
+  return `${symbol}${numPrice.toFixed(2)}`;
 }
 
 export default function NotificationBell() {
