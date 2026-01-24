@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Shows which channels (Telegram, Discord, Pushover, ntfy) received each notification
   - Links to product detail pages from notification entries
   - **Clear button** to dismiss notifications from dropdown without deleting history
+- **Particle background effect** - Subtle animated particles floating behind all content
+  - Theme-aware: white particles on dark mode, indigo on light mode
+  - Multiple layers with varying speeds for depth effect
 - **Star History chart** in README to track repository stars over time
 
 ### Fixed
