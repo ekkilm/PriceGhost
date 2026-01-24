@@ -99,6 +99,16 @@ export default function NotificationBell() {
     }
   };
 
+  const handleClear = async () => {
+    try {
+      await notificationsApi.clear();
+      setNotifications([]);
+      setRecentCount(0);
+    } catch (error) {
+      console.error('Failed to clear notifications:', error);
+    }
+  };
+
   return (
     <div className="notification-bell" ref={dropdownRef}>
       <style>{`
@@ -169,6 +179,22 @@ export default function NotificationBell() {
         .notification-dropdown-header svg {
           width: 18px;
           height: 18px;
+        }
+
+        .notification-clear-btn {
+          background: none;
+          border: none;
+          color: var(--text-muted);
+          font-size: 0.75rem;
+          cursor: pointer;
+          padding: 0.25rem 0.5rem;
+          border-radius: 0.25rem;
+          transition: all 0.2s;
+        }
+
+        .notification-clear-btn:hover {
+          background: var(--background);
+          color: var(--text);
         }
 
         .notification-list {
@@ -300,10 +326,11 @@ export default function NotificationBell() {
         <div className="notification-dropdown">
           <div className="notification-dropdown-header">
             <span>Notifications</span>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-            </svg>
+            {notifications.length > 0 && (
+              <button className="notification-clear-btn" onClick={handleClear}>
+                Clear
+              </button>
+            )}
           </div>
 
           {loading ? (

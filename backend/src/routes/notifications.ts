@@ -69,4 +69,16 @@ router.get('/count', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Clear notifications (marks as seen, doesn't delete history)
+router.post('/clear', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId!;
+    await notificationHistoryQueries.clear(userId);
+    res.json({ message: 'Notifications cleared' });
+  } catch (error) {
+    console.error('Error clearing notifications:', error);
+    res.status(500).json({ error: 'Failed to clear notifications' });
+  }
+});
+
 export default router;

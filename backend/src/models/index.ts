@@ -856,26 +856,39 @@ export const notificationHistoryQueries = {
     return result.rows;
   },
 
-  // Get recent notifications (for bell dropdown)
+  // Get recent notifications (for bell dropdown) - respects cleared_at
   getRecent: async (userId: number, limit: number = 10): Promise<NotificationHistory[]> => {
     const result = await pool.query(
-      `SELECT * FROM notification_history
-       WHERE user_id = $1
-       ORDER BY triggered_at DESC
+      `SELECT nh.* FROM notification_history nh
+       JOIN users u ON u.id = nh.user_id
+       WHERE nh.user_id = $1
+         AND (u.notifications_cleared_at IS NULL OR nh.triggered_at > u.notifications_cleared_at)
+       ORDER BY nh.triggered_at DESC
        LIMIT $2`,
       [userId, limit]
     );
     return result.rows;
   },
 
-  // Count notifications in last 24 hours (for badge)
+  // Count notifications since last clear (for badge)
   countRecent: async (userId: number, hours: number = 24): Promise<number> => {
     const result = await pool.query(
-      `SELECT COUNT(*) FROM notification_history
-       WHERE user_id = $1 AND triggered_at > NOW() - INTERVAL '1 hour' * $2`,
+      `SELECT COUNT(*) FROM notification_history nh
+       JOIN users u ON u.id = nh.user_id
+       WHERE nh.user_id = $1
+         AND nh.triggered_at > NOW() - INTERVAL '1 hour' * $2
+         AND (u.notifications_cleared_at IS NULL OR nh.triggered_at > u.notifications_cleared_at)`,
       [userId, hours]
     );
     return parseInt(result.rows[0].count, 10);
+  },
+
+  // Clear notifications (sets timestamp, doesn't delete)
+  clear: async (userId: number): Promise<void> => {
+    await pool.query(
+      `UPDATE users SET notifications_cleared_at = NOW() WHERE id = $1`,
+      [userId]
+    );
   },
 
   // Get total count for pagination

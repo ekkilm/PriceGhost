@@ -313,6 +313,9 @@ export const notificationsApi = {
     api.get<{ count: number }>('/notifications/count', {
       params: hours ? { hours } : undefined,
     }),
+
+  clear: () =>
+    api.post<{ message: string }>('/notifications/clear'),
 };
 
 // Admin API
