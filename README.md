@@ -300,3 +300,13 @@ To avoid getting blocked by retailers:
 ## License
 
 MIT
+
+## Star History
+
+<a href="https://star-history.com/#clucraft/PriceGhost&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=clucraft/PriceGhost&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=clucraft/PriceGhost&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=clucraft/PriceGhost&type=Date" />
+ </picture>
+</a>
