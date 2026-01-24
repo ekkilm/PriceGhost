@@ -164,6 +164,10 @@ async function runMigrations() {
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'price_candidates') THEN
           ALTER TABLE products ADD COLUMN price_candidates JSONB;
         END IF;
+        -- Anchor price: the price the user confirmed, used to select correct variant on refresh
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'anchor_price') THEN
+          ALTER TABLE products ADD COLUMN anchor_price DECIMAL(10,2);
+        END IF;
       END $$;
     `);
 

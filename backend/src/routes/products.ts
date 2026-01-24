@@ -57,6 +57,9 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       // Store the preferred extraction method and the user-selected price
       await productQueries.updateExtractionMethod(product.id, selectedMethod);
 
+      // Store the anchor price - used on refresh to select the correct variant
+      await productQueries.updateAnchorPrice(product.id, selectedPrice);
+
       // Record the user-selected price
       await priceHistoryQueries.create(
         product.id,

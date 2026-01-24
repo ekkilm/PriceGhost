@@ -26,11 +26,15 @@ async function checkPrices(): Promise<void> {
         // Get preferred extraction method for this product (if user previously selected one)
         const preferredMethod = await productQueries.getPreferredExtractionMethod(product.id);
 
-        // Use voting scraper with preferred method if available
+        // Get anchor price for variant products (the price the user confirmed)
+        const anchorPrice = await productQueries.getAnchorPrice(product.id);
+
+        // Use voting scraper with preferred method and anchor price if available
         const scrapedData = await scrapeProductWithVoting(
           product.url,
           product.user_id,
-          preferredMethod as ExtractionMethod | undefined
+          preferredMethod as ExtractionMethod | undefined,
+          anchorPrice || undefined
         );
 
         // Check for back-in-stock notification

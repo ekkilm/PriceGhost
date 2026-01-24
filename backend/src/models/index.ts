@@ -566,6 +566,21 @@ export const productQueries = {
     );
     return result.rows[0]?.preferred_extraction_method || null;
   },
+
+  updateAnchorPrice: async (id: number, price: number): Promise<void> => {
+    await pool.query(
+      'UPDATE products SET anchor_price = $1 WHERE id = $2',
+      [price, id]
+    );
+  },
+
+  getAnchorPrice: async (id: number): Promise<number | null> => {
+    const result = await pool.query(
+      'SELECT anchor_price FROM products WHERE id = $1',
+      [id]
+    );
+    return result.rows[0]?.anchor_price ? parseFloat(result.rows[0].anchor_price) : null;
+  },
 };
 
 // Price History types and queries
