@@ -37,6 +37,20 @@ export function parsePrice(text: string): ParsedPrice | null {
   // Clean up the text
   const cleanText = text.trim().replace(/\s+/g, ' ');
 
+  // Reject monthly payment/financing prices (e.g., "$25/mo", "per month", "4 payments", etc.)
+  const lowerText = cleanText.toLowerCase();
+  if (lowerText.includes('/mo') ||
+      lowerText.includes('per month') ||
+      lowerText.includes('monthly payment') ||
+      lowerText.includes('a month') ||
+      lowerText.includes('payments starting') ||
+      lowerText.includes('payment of') ||
+      lowerText.includes('payments of') ||
+      /\d+\s*payments?\b/.test(lowerText) ||
+      /\d+\s*mo\b/.test(lowerText)) {
+    return null;
+  }
+
   for (const pattern of pricePatterns) {
     const match = cleanText.match(pattern);
     if (match && match.groups) {

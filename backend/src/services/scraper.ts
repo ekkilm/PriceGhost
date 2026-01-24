@@ -381,11 +381,26 @@ const siteScrapers: SiteScraper[] = [
 
       let price: ParsedPrice | null = null;
       for (const selector of priceSelectors) {
-        const el = $(selector).first();
-        if (el.length) {
-          price = parsePrice(el.text().trim());
-          if (price) break;
-        }
+        const elements = $(selector);
+        // Check each element, skip payment plan prices (contain "/mo", "per month", etc.)
+        elements.each((_, el) => {
+          if (price) return false; // Already found a valid price
+          const text = $(el).text().trim();
+          const lowerText = text.toLowerCase();
+          // Skip if it looks like a monthly payment plan
+          if (lowerText.includes('/mo') ||
+              lowerText.includes('per month') ||
+              lowerText.includes('monthly') ||
+              lowerText.includes('financing')) {
+            return true; // Continue to next element
+          }
+          const parsed = parsePrice(text);
+          if (parsed) {
+            price = parsed;
+            return false; // Break the loop
+          }
+        });
+        if (price) break;
       }
 
       const name = $('h1.heading-5').text().trim() ||
