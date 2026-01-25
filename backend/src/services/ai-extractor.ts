@@ -37,8 +37,7 @@ export interface AIStockStatusResult {
   reason: string;
 }
 
-const VERIFICATION_PROMPT = `/nothink
-You are a price and availability verification assistant. I scraped a product page and found a price. Please verify if this price is correct AND if the product is currently available for purchase.
+const VERIFICATION_PROMPT = `You are a price and availability verification assistant. I scraped a product page and found a price. Please verify if this price is correct AND if the product is currently available for purchase.
 
 Scraped Price: $SCRAPED_PRICE$ $CURRENCY$
 
@@ -74,8 +73,7 @@ Only return valid JSON, no explanation text outside the JSON.
 HTML Content:
 `;
 
-const STOCK_STATUS_PROMPT = `/nothink
-You are an availability verification assistant. The user is tracking a SPECIFIC product variant priced at $VARIANT_PRICE$ $CURRENCY$.
+const STOCK_STATUS_PROMPT = `You are an availability verification assistant. The user is tracking a SPECIFIC product variant priced at $VARIANT_PRICE$ $CURRENCY$.
 
 Your task: Determine if THIS SPECIFIC VARIANT (the one at $VARIANT_PRICE$) is currently in stock and can be purchased.
 
@@ -107,8 +105,7 @@ Only return valid JSON, no explanation text outside the JSON.
 HTML Content:
 `;
 
-const EXTRACTION_PROMPT = `/nothink
-You are a price extraction assistant. Analyze the following HTML content from a product page and extract the product information.
+const EXTRACTION_PROMPT = `You are a price extraction assistant. Analyze the following HTML content from a product page and extract the product information.
 
 Return a JSON object with these fields:
 - name: The product name/title (string or null)
@@ -295,6 +292,7 @@ async function extractWithOllama(
         },
       ],
       stream: false,
+      think: false, // Disable thinking mode for Qwen3/DeepSeek models
     },
     {
       headers: {
@@ -389,6 +387,7 @@ async function verifyWithOllama(
       model: model,
       messages: [{ role: 'user', content: prompt }],
       stream: false,
+      think: false, // Disable thinking mode for Qwen3/DeepSeek models
     },
     {
       headers: { 'Content-Type': 'application/json' },
@@ -481,6 +480,7 @@ async function verifyStockStatusWithOllama(
       model: model,
       messages: [{ role: 'user', content: prompt }],
       stream: false,
+      think: false, // Disable thinking mode for Qwen3/DeepSeek models
     },
     {
       headers: { 'Content-Type': 'application/json' },
@@ -827,8 +827,7 @@ export async function tryAIStockStatusVerification(
 }
 
 // Arbitration prompt for when multiple extraction methods disagree
-const ARBITRATION_PROMPT = `/nothink
-You are a price arbitration assistant. Multiple price extraction methods found different prices for the same product. Help determine the correct price.
+const ARBITRATION_PROMPT = `You are a price arbitration assistant. Multiple price extraction methods found different prices for the same product. Help determine the correct price.
 
 Found prices:
 $CANDIDATES$
@@ -937,6 +936,7 @@ async function arbitrateWithOllama(
       model: model,
       messages: [{ role: 'user', content: prompt }],
       stream: false,
+      think: false, // Disable thinking mode for Qwen3/DeepSeek models
     },
     {
       headers: { 'Content-Type': 'application/json' },
