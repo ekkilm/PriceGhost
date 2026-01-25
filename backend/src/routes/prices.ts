@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
 import { productQueries, priceHistoryQueries, stockStatusHistoryQueries } from '../models';
-import { scrapeProduct } from '../services/scraper';
+import { scrapeProductWithVoting, ExtractionMethod } from '../services/scraper';
 
 const router = Router();
 
@@ -62,8 +62,21 @@ router.post('/:productId/refresh', async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    // Scrape product data including price and stock status (pass userId for AI verification)
-    const scrapedData = await scrapeProduct(product.url, userId);
+    // Get product settings for AI skip flags
+    const preferredMethod = await productQueries.getPreferredExtractionMethod(productId);
+    const anchorPrice = await productQueries.getAnchorPrice(productId);
+    const skipAiVerification = await productQueries.isAiVerificationDisabled(productId);
+    const skipAiExtraction = await productQueries.isAiExtractionDisabled(productId);
+
+    // Scrape product data with proper settings (same as scheduler)
+    const scrapedData = await scrapeProductWithVoting(
+      product.url,
+      userId,
+      preferredMethod as ExtractionMethod | undefined,
+      anchorPrice || undefined,
+      skipAiVerification,
+      skipAiExtraction
+    );
 
     // Update stock status and record change if different
     if (scrapedData.stockStatus !== product.stock_status) {
