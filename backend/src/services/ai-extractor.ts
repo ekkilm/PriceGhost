@@ -22,6 +22,12 @@ export interface AIVerificationResult {
   stockStatus?: StockStatus;
 }
 
+export interface AIStockStatusResult {
+  stockStatus: StockStatus;
+  confidence: number;
+  reason: string;
+}
+
 const VERIFICATION_PROMPT = `You are a price and availability verification assistant. I scraped a product page and found a price. Please verify if this price is correct AND if the product is currently available for purchase.
 
 Scraped Price: $SCRAPED_PRICE$ $CURRENCY$
@@ -52,6 +58,38 @@ Return a JSON object with:
 - suggestedCurrency: currency code if suggesting a different price
 - stockStatus: "in_stock", "out_of_stock", or "unknown" - based on whether the product can be purchased RIGHT NOW
 - reason: brief explanation of your decision (mention both price and availability)
+
+Only return valid JSON, no explanation text outside the JSON.
+
+HTML Content:
+`;
+
+const STOCK_STATUS_PROMPT = `You are an availability verification assistant. The user is tracking a SPECIFIC product variant priced at $VARIANT_PRICE$ $CURRENCY$.
+
+Your task: Determine if THIS SPECIFIC VARIANT (the one at $VARIANT_PRICE$) is currently in stock and can be purchased.
+
+Important context:
+- This page may show MULTIPLE variants (sizes, colors, configurations) at DIFFERENT prices
+- Some variants may be out of stock while others are in stock
+- ONLY report on the variant priced at $VARIANT_PRICE$ - ignore other variants
+- If the $VARIANT_PRICE$ variant exists and can be added to cart, it's IN STOCK
+- If only other variants are available but not the $VARIANT_PRICE$ one, it's OUT OF STOCK
+
+Signs the $VARIANT_PRICE$ variant is IN STOCK:
+- The price $VARIANT_PRICE$ is displayed with an active "Add to Cart" button
+- The variant at this price shows "In Stock" or available quantity
+- The product at this exact price can be purchased now
+
+Signs the $VARIANT_PRICE$ variant is OUT OF STOCK:
+- The $VARIANT_PRICE$ variant shows "Out of Stock", "Unavailable", or "Sold Out"
+- Only a "Notify Me" or "Waitlist" button is shown for this variant
+- The price exists but the specific variant cannot be added to cart
+- A different price is shown as the main purchasable option
+
+Return a JSON object with:
+- stockStatus: "in_stock", "out_of_stock", or "unknown"
+- confidence: number from 0 to 1
+- reason: brief explanation focusing on the $VARIANT_PRICE$ variant specifically
 
 Only return valid JSON, no explanation text outside the JSON.
 
@@ -354,6 +392,147 @@ async function verifyWithOllama(
   return parseVerificationResponse(content, scrapedPrice, currency);
 }
 
+// Stock status verification functions (for variant products with anchor price)
+async function verifyStockStatusWithAnthropic(
+  html: string,
+  variantPrice: number,
+  currency: string,
+  apiKey: string,
+  model?: string | null
+): Promise<AIStockStatusResult> {
+  const anthropic = new Anthropic({ apiKey });
+
+  const preparedHtml = prepareHtmlForAI(html);
+  const prompt = STOCK_STATUS_PROMPT
+    .replace(/\$VARIANT_PRICE\$/g, variantPrice.toString())
+    .replace(/\$CURRENCY\$/g, currency) + preparedHtml;
+  const modelToUse = model || DEFAULT_ANTHROPIC_MODEL;
+
+  const response = await anthropic.messages.create({
+    model: modelToUse,
+    max_tokens: 256,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const content = response.content[0];
+  if (content.type !== 'text') {
+    throw new Error('Unexpected response type from Anthropic');
+  }
+
+  return parseStockStatusResponse(content.text);
+}
+
+async function verifyStockStatusWithOpenAI(
+  html: string,
+  variantPrice: number,
+  currency: string,
+  apiKey: string,
+  model?: string | null
+): Promise<AIStockStatusResult> {
+  const openai = new OpenAI({ apiKey });
+
+  const preparedHtml = prepareHtmlForAI(html);
+  const prompt = STOCK_STATUS_PROMPT
+    .replace(/\$VARIANT_PRICE\$/g, variantPrice.toString())
+    .replace(/\$CURRENCY\$/g, currency) + preparedHtml;
+  const modelToUse = model || DEFAULT_OPENAI_MODEL;
+
+  const response = await openai.chat.completions.create({
+    model: modelToUse,
+    max_tokens: 256,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) {
+    throw new Error('No response from OpenAI');
+  }
+
+  return parseStockStatusResponse(content);
+}
+
+async function verifyStockStatusWithOllama(
+  html: string,
+  variantPrice: number,
+  currency: string,
+  baseUrl: string,
+  model: string
+): Promise<AIStockStatusResult> {
+  const preparedHtml = prepareHtmlForAI(html);
+  const prompt = STOCK_STATUS_PROMPT
+    .replace(/\$VARIANT_PRICE\$/g, variantPrice.toString())
+    .replace(/\$CURRENCY\$/g, currency) + preparedHtml;
+
+  const response = await axios.post(
+    `${baseUrl}/api/chat`,
+    {
+      model: model,
+      messages: [{ role: 'user', content: prompt }],
+      stream: false,
+    },
+    {
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 120000,
+    }
+  );
+
+  const content = response.data?.message?.content;
+  if (!content) {
+    throw new Error('No response from Ollama');
+  }
+
+  return parseStockStatusResponse(content);
+}
+
+function parseStockStatusResponse(responseText: string): AIStockStatusResult {
+  console.log(`[AI Stock] Raw response: ${responseText.substring(0, 500)}...`);
+
+  // Default result if parsing fails
+  const defaultResult: AIStockStatusResult = {
+    stockStatus: 'unknown',
+    confidence: 0,
+    reason: 'Failed to parse AI response',
+  };
+
+  try {
+    // Extract JSON from response (handle markdown code blocks)
+    let jsonStr = responseText;
+    const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) {
+      jsonStr = jsonMatch[1].trim();
+    } else {
+      // Try to find raw JSON
+      const rawJsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (rawJsonMatch) {
+        jsonStr = rawJsonMatch[0];
+      }
+    }
+
+    const parsed = JSON.parse(jsonStr);
+    console.log(`[AI Stock] Parsed:`, JSON.stringify(parsed, null, 2));
+
+    // Normalize stock status
+    let stockStatus: StockStatus = 'unknown';
+    if (parsed.stockStatus) {
+      const status = parsed.stockStatus.toLowerCase().replace(/[^a-z_]/g, '');
+      if (status === 'in_stock' || status === 'instock') {
+        stockStatus = 'in_stock';
+      } else if (status === 'out_of_stock' || status === 'outofstock') {
+        stockStatus = 'out_of_stock';
+      }
+    }
+
+    return {
+      stockStatus,
+      confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
+      reason: parsed.reason || 'No reason provided',
+    };
+  } catch (error) {
+    console.error(`[AI Stock] Failed to parse response:`, error);
+    return defaultResult;
+  }
+}
+
 function parseVerificationResponse(
   responseText: string,
   originalPrice: number,
@@ -591,6 +770,45 @@ export async function tryAIVerification(
     return null;
   } catch (error) {
     console.error(`[AI Verify] Verification failed for ${url}:`, error);
+    return null;
+  }
+}
+
+// Export for use in scraper to verify stock status for a specific variant price
+export async function tryAIStockStatusVerification(
+  url: string,
+  html: string,
+  variantPrice: number,
+  currency: string,
+  userId: number
+): Promise<AIStockStatusResult | null> {
+  try {
+    const { userQueries } = await import('../models');
+    const settings = await userQueries.getAISettings(userId);
+
+    // Need AI enabled for stock status verification
+    if (!settings?.ai_enabled && !settings?.ai_verification_enabled) {
+      return null;
+    }
+
+    // Need a configured provider
+    if (settings.ai_provider === 'anthropic' && settings.anthropic_api_key) {
+      const modelToUse = settings.anthropic_model || DEFAULT_ANTHROPIC_MODEL;
+      console.log(`[AI Stock] Using Anthropic (${modelToUse}) to verify stock status for $${variantPrice} variant at ${url}`);
+      return await verifyStockStatusWithAnthropic(html, variantPrice, currency, settings.anthropic_api_key, settings.anthropic_model);
+    } else if (settings.ai_provider === 'openai' && settings.openai_api_key) {
+      const modelToUse = settings.openai_model || DEFAULT_OPENAI_MODEL;
+      console.log(`[AI Stock] Using OpenAI (${modelToUse}) to verify stock status for $${variantPrice} variant at ${url}`);
+      return await verifyStockStatusWithOpenAI(html, variantPrice, currency, settings.openai_api_key, settings.openai_model);
+    } else if (settings.ai_provider === 'ollama' && settings.ollama_base_url && settings.ollama_model) {
+      console.log(`[AI Stock] Using Ollama (${settings.ollama_model}) to verify stock status for $${variantPrice} variant at ${url}`);
+      return await verifyStockStatusWithOllama(html, variantPrice, currency, settings.ollama_base_url, settings.ollama_model);
+    }
+
+    console.log(`[AI Stock] No AI provider configured for stock status verification`);
+    return null;
+  } catch (error) {
+    console.error(`[AI Stock] Stock status verification failed for ${url}:`, error);
     return null;
   }
 }

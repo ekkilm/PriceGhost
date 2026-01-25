@@ -1518,7 +1518,28 @@ export async function scrapeProductWithVoting(
         result.price = { price: closestCandidate.price, currency: closestCandidate.currency };
         result.selectedMethod = closestCandidate.method;
         usedAnchorPrice = true;
-        result.aiStatus = 'verified';  // Mark as verified to skip AI override
+        result.aiStatus = 'verified';  // Mark as verified to skip AI price override
+
+        // Use AI to verify stock status for this specific variant (price matched, but stock might be wrong)
+        if (userId && html && !skipAiVerification) {
+          try {
+            const { tryAIStockStatusVerification } = await import('./ai-extractor');
+            const stockResult = await tryAIStockStatusVerification(
+              url,
+              html,
+              closestCandidate.price,
+              closestCandidate.currency,
+              userId
+            );
+            if (stockResult && stockResult.confidence > 0.6) {
+              console.log(`[Voting] AI stock status for $${closestCandidate.price} variant: ${stockResult.stockStatus} (${stockResult.reason})`);
+              result.stockStatus = stockResult.stockStatus;
+            }
+          } catch (stockError) {
+            console.error(`[Voting] AI stock status verification failed:`, stockError);
+          }
+        }
+
         return result;
       } else {
         // No close match - still use the closest candidate
@@ -1531,6 +1552,27 @@ export async function scrapeProductWithVoting(
         // The user selected a specific price (e.g., "other sellers" on Amazon), don't let AI
         // "correct" it to the main buy box price
         result.aiStatus = 'verified';
+
+        // Use AI to verify stock status for this specific variant
+        if (userId && html && !skipAiVerification) {
+          try {
+            const { tryAIStockStatusVerification } = await import('./ai-extractor');
+            const stockResult = await tryAIStockStatusVerification(
+              url,
+              html,
+              closestCandidate.price,
+              closestCandidate.currency,
+              userId
+            );
+            if (stockResult && stockResult.confidence > 0.6) {
+              console.log(`[Voting] AI stock status for $${closestCandidate.price} variant: ${stockResult.stockStatus} (${stockResult.reason})`);
+              result.stockStatus = stockResult.stockStatus;
+            }
+          } catch (stockError) {
+            console.error(`[Voting] AI stock status verification failed:`, stockError);
+          }
+        }
+
         return result;
       }
     }
