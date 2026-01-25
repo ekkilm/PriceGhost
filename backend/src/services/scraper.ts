@@ -132,14 +132,33 @@ function extractSiteSpecificCandidates($: CheerioAPI, url: string): { candidates
 
   const siteScraper = siteScrapers.find((s) => s.match(url));
   if (siteScraper) {
-    const siteResult = siteScraper.scrape($, url);
-    if (siteResult.price) {
+    const siteResult = siteScraper.scrape($, url) as {
+      price?: ParsedPrice | null;
+      name?: string | null;
+      imageUrl?: string | null;
+      stockStatus?: StockStatus;
+      allPrices?: ParsedPrice[];  // Some scrapers return multiple prices (e.g., Amazon)
+    };
+
+    // If scraper returned multiple prices, add them all as candidates
+    if (siteResult.allPrices && siteResult.allPrices.length > 0) {
+      for (const p of siteResult.allPrices) {
+        candidates.push({
+          price: p.price,
+          currency: p.currency,
+          method: 'site-specific',
+          context: `Site-specific extractor for ${new URL(url).hostname}`,
+          confidence: 0.85,
+        });
+      }
+    } else if (siteResult.price) {
+      // Single price result
       candidates.push({
         price: siteResult.price.price,
         currency: siteResult.price.currency,
         method: 'site-specific',
         context: `Site-specific extractor for ${new URL(url).hostname}`,
-        confidence: 0.85, // Site-specific scrapers are well-tested
+        confidence: 0.85,
       });
     }
     name = siteResult.name || null;
@@ -336,8 +355,18 @@ const siteScrapers: SiteScraper[] = [
         return false;
       };
 
-      // Try to get the main displayed price from specific containers first
-      // These are the primary price display areas on Amazon
+      // Collect ALL prices found on the page (for variant/seller support)
+      const allPrices: ParsedPrice[] = [];
+      const seenPrices = new Set<number>();
+
+      const addPrice = (parsed: ParsedPrice | null) => {
+        if (parsed && parsed.price >= 2 && !seenPrices.has(parsed.price)) {
+          seenPrices.add(parsed.price);
+          allPrices.push(parsed);
+        }
+      };
+
+      // 1. Main buy box price
       const primaryPriceContainers = [
         '#corePrice_feature_div',
         '#corePriceDisplay_desktop_feature_div',
@@ -345,74 +374,108 @@ const siteScrapers: SiteScraper[] = [
         '#apex_offerDisplay_desktop',
       ];
 
-      let price: ParsedPrice | null = null;
+      let mainPrice: ParsedPrice | null = null;
 
-      // First, try the primary price containers
       for (const containerId of primaryPriceContainers) {
         const container = $(containerId);
         if (!container.length) continue;
 
-        // Look for the main price display (not savings/coupons)
         const priceElements = container.find('.a-price .a-offscreen');
 
         for (let i = 0; i < priceElements.length; i++) {
           const el = $(priceElements[i]);
-
-          // Skip if this is inside a coupon container
           if (isInCouponContainer(el)) continue;
 
-          // Skip if the parent has "savings" or similar class
           const parentClass = el.parent().attr('class') || '';
           if (/savings|coupon|save/i.test(parentClass)) continue;
 
           const text = el.text().trim();
           const parsed = parsePrice(text);
 
-          // Validate the price is reasonable (not a $1 coupon)
           if (parsed && parsed.price >= 2) {
-            price = parsed;
-            break;
-          }
-        }
-
-        if (price) break;
-      }
-
-      // Fallback: try other known price selectors
-      if (!price) {
-        const fallbackSelectors = [
-          '#priceblock_dealprice',
-          '#priceblock_saleprice',
-          '#priceblock_ourprice',
-          '#price_inside_buybox',
-          '#newBuyBoxPrice',
-          'span[data-a-color="price"] .a-offscreen',
-        ];
-
-        for (const selector of fallbackSelectors) {
-          const el = $(selector).first();
-          if (el.length && !isInCouponContainer(el)) {
-            const text = el.text().trim();
-            const parsed = parsePrice(text);
-            if (parsed && parsed.price >= 2) {
-              price = parsed;
-              break;
-            }
+            if (!mainPrice) mainPrice = parsed;
+            addPrice(parsed);
           }
         }
       }
 
-      // Last resort: look for the whole/fraction price format
-      if (!price) {
+      // 2. "Other Sellers" / "New & Used" prices
+      // Look for "Other Sellers on Amazon" section
+      const otherSellersSelectors = [
+        '#aod-offer-price .a-offscreen',  // "All Offers" display
+        '#olp-upd-new .a-color-price',     // "New from $X"
+        '#olp-upd-used .a-color-price',    // "Used from $X"
+        '#usedBuySection .a-color-price',
+        '#newBuySection .a-color-price',
+        '.olp-from-new-price',
+        '.olp-from-used-price',
+        '#buyNew_noncbb .a-color-price',   // "Buy New" non-buy-box
+      ];
+
+      for (const selector of otherSellersSelectors) {
+        $(selector).each((_, el) => {
+          const text = $(el).text().trim();
+          addPrice(parsePrice(text));
+        });
+      }
+
+      // 3. "New & Used from $X" link text
+      const newUsedLink = $('#usedAndNewBuySection, #newUsedBuyBox, [id*="olp"]').text();
+      const newUsedMatch = newUsedLink.match(/\$[\d,]+\.?\d*/g);
+      if (newUsedMatch) {
+        for (const priceStr of newUsedMatch) {
+          addPrice(parsePrice(priceStr));
+        }
+      }
+
+      // 4. Subscribe & Save price
+      const snsPrice = $('#subscribeAndSavePrice, #sns-price, .sns-price-block .a-offscreen').first().text();
+      if (snsPrice) {
+        addPrice(parsePrice(snsPrice));
+      }
+
+      // 5. Fallback selectors
+      const fallbackSelectors = [
+        '#priceblock_dealprice',
+        '#priceblock_saleprice',
+        '#priceblock_ourprice',
+        '#price_inside_buybox',
+        '#newBuyBoxPrice',
+        'span[data-a-color="price"] .a-offscreen',
+      ];
+
+      for (const selector of fallbackSelectors) {
+        const el = $(selector).first();
+        if (el.length && !isInCouponContainer(el)) {
+          const text = el.text().trim();
+          const parsed = parsePrice(text);
+          if (parsed && parsed.price >= 2) {
+            if (!mainPrice) mainPrice = parsed;
+            addPrice(parsed);
+          }
+        }
+      }
+
+      // 6. Whole/fraction price format
+      if (!mainPrice) {
         const whole = $('#corePrice_feature_div .a-price-whole').first().text().replace(',', '');
         const fraction = $('#corePrice_feature_div .a-price-fraction').first().text();
         if (whole) {
           const priceStr = `$${whole}${fraction ? '.' + fraction : ''}`;
           const parsed = parsePrice(priceStr);
           if (parsed && parsed.price >= 2) {
-            price = parsed;
+            mainPrice = parsed;
+            addPrice(parsed);
           }
         }
+      }
+
+      // Use main price as the primary, but we've collected all prices for candidate matching
+      const price = mainPrice;
+
+      // Log what we found for debugging
+      if (allPrices.length > 1) {
+        console.log(`[Amazon] Found ${allPrices.length} prices: ${allPrices.map(p => p.price).join(', ')}`);
       }
 
       // Product name
@@ -432,15 +495,13 @@ const siteScrapers: SiteScraper[] = [
       const outOfStockDiv = $('#outOfStock').length > 0;
       const unavailableText = $('body').text().toLowerCase();
 
-      // Check for out of stock indicators
       if (
         outOfStockDiv ||
         availabilityText.includes('currently unavailable') ||
         availabilityText.includes('out of stock') ||
         availabilityText.includes('not available') ||
-        $('#add-to-cart-button').length === 0 && $('#buy-now-button').length === 0
+        ($('#add-to-cart-button').length === 0 && $('#buy-now-button').length === 0)
       ) {
-        // Verify it's truly out of stock by checking for unavailable messaging
         if (
           unavailableText.includes('currently unavailable') ||
           unavailableText.includes("we don't know when or if this item will be back in stock") ||
@@ -457,7 +518,7 @@ const siteScrapers: SiteScraper[] = [
         stockStatus = 'in_stock';
       }
 
-      return { name, price, imageUrl, stockStatus };
+      return { name, price, imageUrl, stockStatus, allPrices };
     },
   },
 
@@ -1429,10 +1490,13 @@ export async function scrapeProductWithVoting(
     // Store all candidates
     result.priceCandidates = allCandidates;
 
+    // Track if we used anchor price (to prevent AI from overriding user's choice)
+    let usedAnchorPrice = false;
+
     // PRIORITY 1: If we have an anchor price, it takes precedence (user confirmed this price)
     // This handles variant products where multiple prices exist on the page
     if (anchorPrice && allCandidates.length > 0) {
-      console.log(`[Voting] Have anchor price ${anchorPrice}, searching ${allCandidates.length} candidates...`);
+      console.log(`[Voting] Have anchor price ${anchorPrice}, searching ${allCandidates.length} candidates: ${allCandidates.map(c => c.price).join(', ')}`);
 
       // Find the candidate closest to the anchor price
       const closestCandidate = allCandidates.reduce((closest, candidate) => {
@@ -1443,17 +1507,27 @@ export async function scrapeProductWithVoting(
 
       const priceDiff = Math.abs(closestCandidate.price - anchorPrice) / anchorPrice;
 
-      // Use anchor matching if within 10% (tight tolerance for variants)
+      // Use anchor matching if within 15% (allows for small sales)
       // or if it's an exact match
-      if (closestCandidate.price === anchorPrice || priceDiff < 0.10) {
+      if (closestCandidate.price === anchorPrice || priceDiff < 0.15) {
         console.log(`[Voting] Found match for anchor price ${anchorPrice}: ${closestCandidate.price} via ${closestCandidate.method} (${(priceDiff * 100).toFixed(1)}% diff)`);
         result.price = { price: closestCandidate.price, currency: closestCandidate.currency };
         result.selectedMethod = closestCandidate.method;
+        usedAnchorPrice = true;
+        result.aiStatus = 'verified';  // Mark as verified to skip AI override
         return result;
       } else {
-        // No close match - price may have legitimately changed
-        console.log(`[Voting] No candidate close to anchor price ${anchorPrice} (closest: ${closestCandidate.price}, ${(priceDiff * 100).toFixed(1)}% diff)`);
-        // Fall through to preferred method or consensus
+        // No close match - still use the closest candidate
+        // This prevents AI from picking a completely different price (like main buy box vs other sellers)
+        console.log(`[Voting] No close match for anchor ${anchorPrice}, using closest: ${closestCandidate.price} (${(priceDiff * 100).toFixed(1)}% diff) - may be a price change`);
+        result.price = { price: closestCandidate.price, currency: closestCandidate.currency };
+        result.selectedMethod = closestCandidate.method;
+        usedAnchorPrice = true;
+        // IMPORTANT: Mark as verified to prevent AI from overriding user's deliberate choice
+        // The user selected a specific price (e.g., "other sellers" on Amazon), don't let AI
+        // "correct" it to the main buy box price
+        result.aiStatus = 'verified';
+        return result;
       }
     }
 
