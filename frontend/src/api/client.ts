@@ -229,7 +229,9 @@ export const settingsApi = {
     ai_verification_enabled?: boolean;
     ai_provider?: 'anthropic' | 'openai' | 'ollama' | null;
     anthropic_api_key?: string | null;
+    anthropic_model?: string | null;
     openai_api_key?: string | null;
+    openai_model?: string | null;
     ollama_base_url?: string | null;
     ollama_model?: string | null;
   }) => api.put<AISettings & { message: string }>('/settings/ai', data),
@@ -247,7 +249,9 @@ export interface AISettings {
   ai_verification_enabled: boolean;
   ai_provider: 'anthropic' | 'openai' | 'ollama' | null;
   anthropic_api_key: string | null;
+  anthropic_model: string | null;
   openai_api_key: string | null;
+  openai_model: string | null;
   ollama_base_url: string | null;
   ollama_model: string | null;
 }

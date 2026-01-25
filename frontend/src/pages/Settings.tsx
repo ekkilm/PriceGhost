@@ -56,7 +56,9 @@ export default function Settings() {
   const [aiVerificationEnabled, setAIVerificationEnabled] = useState(false);
   const [aiProvider, setAIProvider] = useState<'anthropic' | 'openai' | 'ollama'>('anthropic');
   const [anthropicApiKey, setAnthropicApiKey] = useState('');
+  const [anthropicModel, setAnthropicModel] = useState('');
   const [openaiApiKey, setOpenaiApiKey] = useState('');
+  const [openaiModel, setOpenaiModel] = useState('');
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState('');
   const [ollamaModel, setOllamaModel] = useState('');
   const [availableOllamaModels, setAvailableOllamaModels] = useState<string[]>([]);
@@ -114,7 +116,9 @@ export default function Settings() {
         setAIProvider(aiRes.data.ai_provider);
       }
       setAnthropicApiKey(aiRes.data.anthropic_api_key || '');
+      setAnthropicModel(aiRes.data.anthropic_model || '');
       setOpenaiApiKey(aiRes.data.openai_api_key || '');
+      setOpenaiModel(aiRes.data.openai_model || '');
       setOllamaBaseUrl(aiRes.data.ollama_base_url || '');
       setOllamaModel(aiRes.data.ollama_model || '');
     } catch {
@@ -369,12 +373,16 @@ export default function Settings() {
         ai_verification_enabled: aiVerificationEnabled,
         ai_provider: aiProvider,
         anthropic_api_key: anthropicApiKey || undefined,
+        anthropic_model: aiProvider === 'anthropic' ? anthropicModel || null : undefined,
         openai_api_key: openaiApiKey || undefined,
+        openai_model: aiProvider === 'openai' ? openaiModel || null : undefined,
         ollama_base_url: aiProvider === 'ollama' ? ollamaBaseUrl || null : undefined,
         ollama_model: aiProvider === 'ollama' ? ollamaModel || null : undefined,
       });
       setAISettings(response.data);
       setAIVerificationEnabled(response.data.ai_verification_enabled ?? false);
+      setAnthropicModel(response.data.anthropic_model || '');
+      setOpenaiModel(response.data.openai_model || '');
       setAnthropicApiKey('');
       setOpenaiApiKey('');
       setSuccess('AI settings saved successfully');
@@ -1430,37 +1438,99 @@ export default function Settings() {
                     </div>
 
                     {aiProvider === 'anthropic' && (
-                      <div className="settings-form-group">
-                        <label>Anthropic API Key</label>
-                        <PasswordInput
-                          value={anthropicApiKey}
-                          onChange={(e) => setAnthropicApiKey(e.target.value)}
-                          placeholder="sk-ant-..."
-                        />
-                        <p className="hint">
-                          Get your API key from{' '}
-                          <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer">
-                            console.anthropic.com
-                          </a>
-                                                  </p>
-                      </div>
+                      <>
+                        <div className="settings-form-group">
+                          <label>Anthropic API Key</label>
+                          <PasswordInput
+                            value={anthropicApiKey}
+                            onChange={(e) => setAnthropicApiKey(e.target.value)}
+                            placeholder="sk-ant-..."
+                          />
+                          <p className="hint">
+                            Get your API key from{' '}
+                            <a href="https://console.anthropic.com/" target="_blank" rel="noopener noreferrer">
+                              console.anthropic.com
+                            </a>
+                          </p>
+                        </div>
+
+                        <div className="settings-form-group">
+                          <label>Model</label>
+                          <select
+                            value={anthropicModel}
+                            onChange={(e) => setAnthropicModel(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '0.625rem 0.75rem',
+                              border: '1px solid var(--border)',
+                              borderRadius: '0.375rem',
+                              background: 'var(--background)',
+                              color: 'var(--text)',
+                              fontSize: '0.875rem'
+                            }}
+                          >
+                            <option value="">Default (Claude Haiku 4.5)</option>
+                            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (Fast, cheap)</option>
+                            <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5 (Recommended)</option>
+                            <option value="claude-opus-4-5-20251101">Claude Opus 4.5 (Most capable)</option>
+                            <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+                            <option value="claude-3-7-sonnet-20250219">Claude 3.7 Sonnet (Legacy)</option>
+                            <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku (Legacy)</option>
+                          </select>
+                          <p className="hint">
+                            Choose a model based on your cost/accuracy needs. Haiku is fastest and cheapest, Opus is most accurate but expensive.
+                            {aiSettings?.anthropic_model && ` (currently: ${aiSettings.anthropic_model})`}
+                          </p>
+                        </div>
+                      </>
                     )}
 
                     {aiProvider === 'openai' && (
-                      <div className="settings-form-group">
-                        <label>OpenAI API Key</label>
-                        <PasswordInput
-                          value={openaiApiKey}
-                          onChange={(e) => setOpenaiApiKey(e.target.value)}
-                          placeholder="sk-..."
-                        />
-                        <p className="hint">
-                          Get your API key from{' '}
-                          <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">
-                            platform.openai.com
-                          </a>
-                                                  </p>
-                      </div>
+                      <>
+                        <div className="settings-form-group">
+                          <label>OpenAI API Key</label>
+                          <PasswordInput
+                            value={openaiApiKey}
+                            onChange={(e) => setOpenaiApiKey(e.target.value)}
+                            placeholder="sk-..."
+                          />
+                          <p className="hint">
+                            Get your API key from{' '}
+                            <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">
+                              platform.openai.com
+                            </a>
+                          </p>
+                        </div>
+
+                        <div className="settings-form-group">
+                          <label>Model</label>
+                          <select
+                            value={openaiModel}
+                            onChange={(e) => setOpenaiModel(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '0.625rem 0.75rem',
+                              border: '1px solid var(--border)',
+                              borderRadius: '0.375rem',
+                              background: 'var(--background)',
+                              color: 'var(--text)',
+                              fontSize: '0.875rem'
+                            }}
+                          >
+                            <option value="">Default (GPT-4.1 Nano)</option>
+                            <option value="gpt-4.1-nano-2025-04-14">GPT-4.1 Nano (Fast, cheap)</option>
+                            <option value="gpt-4.1-mini-2025-04-14">GPT-4.1 Mini (Balanced)</option>
+                            <option value="gpt-4.1-2025-04-14">GPT-4.1 (High accuracy)</option>
+                            <option value="gpt-5.1-chat-latest">GPT-5.1 Chat (Latest)</option>
+                            <option value="gpt-4o-mini">GPT-4o Mini (Legacy)</option>
+                            <option value="gpt-4o">GPT-4o (Legacy, retiring Feb 2026)</option>
+                          </select>
+                          <p className="hint">
+                            Choose a model based on your cost/accuracy needs. GPT-4.1 Nano is fastest and cheapest.
+                            {aiSettings?.openai_model && ` (currently: ${aiSettings.openai_model})`}
+                          </p>
+                        </div>
+                      </>
                     )}
 
                     {aiProvider === 'ollama' && (

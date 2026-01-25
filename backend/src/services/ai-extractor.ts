@@ -164,16 +164,22 @@ function prepareHtmlForAI(html: string): string {
   return finalContent;
 }
 
+// Default models to use if user hasn't selected one
+const DEFAULT_ANTHROPIC_MODEL = 'claude-haiku-4-5-20251001';
+const DEFAULT_OPENAI_MODEL = 'gpt-4.1-nano-2025-04-14';
+
 async function extractWithAnthropic(
   html: string,
-  apiKey: string
+  apiKey: string,
+  model?: string | null
 ): Promise<AIExtractionResult> {
   const anthropic = new Anthropic({ apiKey });
 
   const preparedHtml = prepareHtmlForAI(html);
+  const modelToUse = model || DEFAULT_ANTHROPIC_MODEL;
 
   const response = await anthropic.messages.create({
-    model: 'claude-3-5-haiku-20241022',
+    model: modelToUse,
     max_tokens: 1024,
     messages: [
       {
@@ -193,14 +199,16 @@ async function extractWithAnthropic(
 
 async function extractWithOpenAI(
   html: string,
-  apiKey: string
+  apiKey: string,
+  model?: string | null
 ): Promise<AIExtractionResult> {
   const openai = new OpenAI({ apiKey });
 
   const preparedHtml = prepareHtmlForAI(html);
+  const modelToUse = model || DEFAULT_OPENAI_MODEL;
 
   const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
+    model: modelToUse,
     max_tokens: 1024,
     messages: [
       {
@@ -259,7 +267,8 @@ async function verifyWithAnthropic(
   html: string,
   scrapedPrice: number,
   currency: string,
-  apiKey: string
+  apiKey: string,
+  model?: string | null
 ): Promise<AIVerificationResult> {
   const anthropic = new Anthropic({ apiKey });
 
@@ -267,9 +276,10 @@ async function verifyWithAnthropic(
   const prompt = VERIFICATION_PROMPT
     .replace('$SCRAPED_PRICE$', scrapedPrice.toString())
     .replace('$CURRENCY$', currency) + preparedHtml;
+  const modelToUse = model || DEFAULT_ANTHROPIC_MODEL;
 
   const response = await anthropic.messages.create({
-    model: 'claude-3-5-haiku-20241022',
+    model: modelToUse,
     max_tokens: 512,
     messages: [{ role: 'user', content: prompt }],
   });
@@ -286,7 +296,8 @@ async function verifyWithOpenAI(
   html: string,
   scrapedPrice: number,
   currency: string,
-  apiKey: string
+  apiKey: string,
+  model?: string | null
 ): Promise<AIVerificationResult> {
   const openai = new OpenAI({ apiKey });
 
@@ -294,9 +305,10 @@ async function verifyWithOpenAI(
   const prompt = VERIFICATION_PROMPT
     .replace('$SCRAPED_PRICE$', scrapedPrice.toString())
     .replace('$CURRENCY$', currency) + preparedHtml;
+  const modelToUse = model || DEFAULT_OPENAI_MODEL;
 
   const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
+    model: modelToUse,
     max_tokens: 512,
     messages: [{ role: 'user', content: prompt }],
   });
@@ -498,9 +510,9 @@ export async function extractWithAI(
 
   // Use the configured provider
   if (settings.ai_provider === 'anthropic' && settings.anthropic_api_key) {
-    return extractWithAnthropic(html, settings.anthropic_api_key);
+    return extractWithAnthropic(html, settings.anthropic_api_key, settings.anthropic_model);
   } else if (settings.ai_provider === 'openai' && settings.openai_api_key) {
-    return extractWithOpenAI(html, settings.openai_api_key);
+    return extractWithOpenAI(html, settings.openai_api_key, settings.openai_model);
   } else if (settings.ai_provider === 'ollama' && settings.ollama_base_url && settings.ollama_model) {
     return extractWithOllama(html, settings.ollama_base_url, settings.ollama_model);
   }
@@ -525,11 +537,13 @@ export async function tryAIExtraction(
 
     // Use the configured provider
     if (settings.ai_provider === 'anthropic' && settings.anthropic_api_key) {
-      console.log(`[AI] Using Anthropic for ${url}`);
-      return await extractWithAnthropic(html, settings.anthropic_api_key);
+      const modelToUse = settings.anthropic_model || DEFAULT_ANTHROPIC_MODEL;
+      console.log(`[AI] Using Anthropic (${modelToUse}) for ${url}`);
+      return await extractWithAnthropic(html, settings.anthropic_api_key, settings.anthropic_model);
     } else if (settings.ai_provider === 'openai' && settings.openai_api_key) {
-      console.log(`[AI] Using OpenAI for ${url}`);
-      return await extractWithOpenAI(html, settings.openai_api_key);
+      const modelToUse = settings.openai_model || DEFAULT_OPENAI_MODEL;
+      console.log(`[AI] Using OpenAI (${modelToUse}) for ${url}`);
+      return await extractWithOpenAI(html, settings.openai_api_key, settings.openai_model);
     } else if (settings.ai_provider === 'ollama' && settings.ollama_base_url && settings.ollama_model) {
       console.log(`[AI] Using Ollama (${settings.ollama_model}) for ${url}`);
       return await extractWithOllama(html, settings.ollama_base_url, settings.ollama_model);
@@ -561,13 +575,15 @@ export async function tryAIVerification(
 
     // Need a configured provider
     if (settings.ai_provider === 'anthropic' && settings.anthropic_api_key) {
-      console.log(`[AI Verify] Using Anthropic to verify $${scrapedPrice} for ${url}`);
-      return await verifyWithAnthropic(html, scrapedPrice, currency, settings.anthropic_api_key);
+      const modelToUse = settings.anthropic_model || DEFAULT_ANTHROPIC_MODEL;
+      console.log(`[AI Verify] Using Anthropic (${modelToUse}) to verify $${scrapedPrice} for ${url}`);
+      return await verifyWithAnthropic(html, scrapedPrice, currency, settings.anthropic_api_key, settings.anthropic_model);
     } else if (settings.ai_provider === 'openai' && settings.openai_api_key) {
-      console.log(`[AI Verify] Using OpenAI to verify $${scrapedPrice} for ${url}`);
-      return await verifyWithOpenAI(html, scrapedPrice, currency, settings.openai_api_key);
+      const modelToUse = settings.openai_model || DEFAULT_OPENAI_MODEL;
+      console.log(`[AI Verify] Using OpenAI (${modelToUse}) to verify $${scrapedPrice} for ${url}`);
+      return await verifyWithOpenAI(html, scrapedPrice, currency, settings.openai_api_key, settings.openai_model);
     } else if (settings.ai_provider === 'ollama' && settings.ollama_base_url && settings.ollama_model) {
-      console.log(`[AI Verify] Using Ollama to verify $${scrapedPrice} for ${url}`);
+      console.log(`[AI Verify] Using Ollama (${settings.ollama_model}) to verify $${scrapedPrice} for ${url}`);
       return await verifyWithOllama(html, scrapedPrice, currency, settings.ollama_base_url, settings.ollama_model);
     }
 
@@ -613,7 +629,8 @@ export interface AIArbitrationResult {
 async function arbitrateWithAnthropic(
   html: string,
   candidates: PriceCandidate[],
-  apiKey: string
+  apiKey: string,
+  model?: string | null
 ): Promise<AIArbitrationResult> {
   const anthropic = new Anthropic({ apiKey });
 
@@ -623,9 +640,10 @@ async function arbitrateWithAnthropic(
 
   const preparedHtml = prepareHtmlForAI(html);
   const prompt = ARBITRATION_PROMPT.replace('$CANDIDATES$', candidatesList) + preparedHtml;
+  const modelToUse = model || DEFAULT_ANTHROPIC_MODEL;
 
   const response = await anthropic.messages.create({
-    model: 'claude-3-5-haiku-20241022',
+    model: modelToUse,
     max_tokens: 512,
     messages: [{ role: 'user', content: prompt }],
   });
@@ -641,7 +659,8 @@ async function arbitrateWithAnthropic(
 async function arbitrateWithOpenAI(
   html: string,
   candidates: PriceCandidate[],
-  apiKey: string
+  apiKey: string,
+  model?: string | null
 ): Promise<AIArbitrationResult> {
   const openai = new OpenAI({ apiKey });
 
@@ -651,9 +670,10 @@ async function arbitrateWithOpenAI(
 
   const preparedHtml = prepareHtmlForAI(html);
   const prompt = ARBITRATION_PROMPT.replace('$CANDIDATES$', candidatesList) + preparedHtml;
+  const modelToUse = model || DEFAULT_OPENAI_MODEL;
 
   const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
+    model: modelToUse,
     max_tokens: 512,
     messages: [{ role: 'user', content: prompt }],
   });
@@ -769,13 +789,15 @@ export async function tryAIArbitration(
 
     // Use the configured provider
     if (settings.ai_provider === 'anthropic' && settings.anthropic_api_key) {
-      console.log(`[AI Arbitrate] Using Anthropic to arbitrate ${candidates.length} prices for ${url}`);
-      return await arbitrateWithAnthropic(html, candidates, settings.anthropic_api_key);
+      const modelToUse = settings.anthropic_model || DEFAULT_ANTHROPIC_MODEL;
+      console.log(`[AI Arbitrate] Using Anthropic (${modelToUse}) to arbitrate ${candidates.length} prices for ${url}`);
+      return await arbitrateWithAnthropic(html, candidates, settings.anthropic_api_key, settings.anthropic_model);
     } else if (settings.ai_provider === 'openai' && settings.openai_api_key) {
-      console.log(`[AI Arbitrate] Using OpenAI to arbitrate ${candidates.length} prices for ${url}`);
-      return await arbitrateWithOpenAI(html, candidates, settings.openai_api_key);
+      const modelToUse = settings.openai_model || DEFAULT_OPENAI_MODEL;
+      console.log(`[AI Arbitrate] Using OpenAI (${modelToUse}) to arbitrate ${candidates.length} prices for ${url}`);
+      return await arbitrateWithOpenAI(html, candidates, settings.openai_api_key, settings.openai_model);
     } else if (settings.ai_provider === 'ollama' && settings.ollama_base_url && settings.ollama_model) {
-      console.log(`[AI Arbitrate] Using Ollama to arbitrate ${candidates.length} prices for ${url}`);
+      console.log(`[AI Arbitrate] Using Ollama (${settings.ollama_model}) to arbitrate ${candidates.length} prices for ${url}`);
       return await arbitrateWithOllama(html, candidates, settings.ollama_base_url, settings.ollama_model);
     }
 

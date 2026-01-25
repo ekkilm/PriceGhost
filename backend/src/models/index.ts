@@ -39,7 +39,9 @@ export interface AISettings {
   ai_verification_enabled: boolean;
   ai_provider: 'anthropic' | 'openai' | 'ollama' | null;
   anthropic_api_key: string | null;
+  anthropic_model: string | null;
   openai_api_key: string | null;
+  openai_model: string | null;
   ollama_base_url: string | null;
   ollama_model: string | null;
 }
@@ -211,7 +213,8 @@ export const userQueries = {
   getAISettings: async (id: number): Promise<AISettings | null> => {
     const result = await pool.query(
       `SELECT ai_enabled, COALESCE(ai_verification_enabled, false) as ai_verification_enabled,
-              ai_provider, anthropic_api_key, openai_api_key, ollama_base_url, ollama_model
+              ai_provider, anthropic_api_key, anthropic_model, openai_api_key, openai_model,
+              ollama_base_url, ollama_model
        FROM users WHERE id = $1`,
       [id]
     );
@@ -242,9 +245,17 @@ export const userQueries = {
       fields.push(`anthropic_api_key = $${paramIndex++}`);
       values.push(settings.anthropic_api_key);
     }
+    if (settings.anthropic_model !== undefined) {
+      fields.push(`anthropic_model = $${paramIndex++}`);
+      values.push(settings.anthropic_model);
+    }
     if (settings.openai_api_key !== undefined) {
       fields.push(`openai_api_key = $${paramIndex++}`);
       values.push(settings.openai_api_key);
+    }
+    if (settings.openai_model !== undefined) {
+      fields.push(`openai_model = $${paramIndex++}`);
+      values.push(settings.openai_model);
     }
     if (settings.ollama_base_url !== undefined) {
       fields.push(`ollama_base_url = $${paramIndex++}`);
@@ -261,7 +272,8 @@ export const userQueries = {
     const result = await pool.query(
       `UPDATE users SET ${fields.join(', ')} WHERE id = $${paramIndex}
        RETURNING ai_enabled, COALESCE(ai_verification_enabled, false) as ai_verification_enabled,
-                 ai_provider, anthropic_api_key, openai_api_key, ollama_base_url, ollama_model`,
+                 ai_provider, anthropic_api_key, anthropic_model, openai_api_key, openai_model,
+                 ollama_base_url, ollama_model`,
       values
     );
     return result.rows[0] || null;

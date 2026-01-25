@@ -122,6 +122,12 @@ async function runMigrations() {
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'ai_verification_enabled') THEN
           ALTER TABLE users ADD COLUMN ai_verification_enabled BOOLEAN DEFAULT false;
         END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'anthropic_model') THEN
+          ALTER TABLE users ADD COLUMN anthropic_model TEXT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'openai_model') THEN
+          ALTER TABLE users ADD COLUMN openai_model TEXT;
+        END IF;
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'notifications_cleared_at') THEN
           ALTER TABLE users ADD COLUMN notifications_cleared_at TIMESTAMP;
         END IF;
