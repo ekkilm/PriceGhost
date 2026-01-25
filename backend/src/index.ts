@@ -178,6 +178,10 @@ async function runMigrations() {
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'ai_verification_disabled') THEN
           ALTER TABLE products ADD COLUMN ai_verification_disabled BOOLEAN DEFAULT false;
         END IF;
+        -- Per-product AI extraction disable flag
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'ai_extraction_disabled') THEN
+          ALTER TABLE products ADD COLUMN ai_extraction_disabled BOOLEAN DEFAULT false;
+        END IF;
       END $$;
     `);
 

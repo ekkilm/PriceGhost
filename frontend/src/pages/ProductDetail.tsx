@@ -31,6 +31,7 @@ export default function ProductDetail() {
   const [targetPrice, setTargetPrice] = useState<string>('');
   const [notifyBackInStock, setNotifyBackInStock] = useState(false);
   const [aiVerificationDisabled, setAiVerificationDisabled] = useState(false);
+  const [aiExtractionDisabled, setAiExtractionDisabled] = useState(false);
 
   const REFRESH_INTERVALS = [
     { value: 300, label: '5 minutes' },
@@ -64,6 +65,7 @@ export default function ProductDetail() {
       }
       setNotifyBackInStock(productRes.data.notify_back_in_stock || false);
       setAiVerificationDisabled(productRes.data.ai_verification_disabled || false);
+      setAiExtractionDisabled(productRes.data.ai_extraction_disabled || false);
     } catch {
       setError('Failed to load product details');
     } finally {
@@ -142,6 +144,7 @@ export default function ProductDetail() {
         target_price: target,
         notify_back_in_stock: notifyBackInStock,
         ai_verification_disabled: aiVerificationDisabled,
+        ai_extraction_disabled: aiExtractionDisabled,
       });
       setProduct({
         ...product,
@@ -149,6 +152,7 @@ export default function ProductDetail() {
         target_price: target,
         notify_back_in_stock: notifyBackInStock,
         ai_verification_disabled: aiVerificationDisabled,
+        ai_extraction_disabled: aiExtractionDisabled,
       });
       showToast('Notification settings saved');
     } catch {
@@ -854,6 +858,18 @@ export default function ProductDetail() {
         </p>
 
         <label className="advanced-checkbox-group">
+          <input
+            type="checkbox"
+            checked={aiExtractionDisabled}
+            onChange={(e) => setAiExtractionDisabled(e.target.checked)}
+          />
+          <div className="advanced-checkbox-label">
+            <span>Disable AI Extraction</span>
+            <span>Prevent AI from being used as a fallback when standard scraping fails to find a price. Useful if AI keeps extracting wrong prices.</span>
+          </div>
+        </label>
+
+        <label className="advanced-checkbox-group" style={{ marginTop: '0.75rem' }}>
           <input
             type="checkbox"
             checked={aiVerificationDisabled}

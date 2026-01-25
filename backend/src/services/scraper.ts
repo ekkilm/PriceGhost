@@ -1356,13 +1356,15 @@ export async function scrapeProduct(url: string, userId?: number): Promise<Scrap
  * @param anchorPrice - The price the user previously confirmed. Used to select the correct
  *                      variant on refresh when multiple prices are found.
  * @param skipAiVerification - If true, skip AI verification entirely for this product.
+ * @param skipAiExtraction - If true, skip AI extraction fallback for this product.
  */
 export async function scrapeProductWithVoting(
   url: string,
   userId?: number,
   preferredMethod?: ExtractionMethod,
   anchorPrice?: number,
-  skipAiVerification?: boolean
+  skipAiVerification?: boolean,
+  skipAiExtraction?: boolean
 ): Promise<ScrapedProductWithCandidates> {
   const result: ScrapedProductWithCandidates = {
     name: null,
@@ -1608,8 +1610,8 @@ export async function scrapeProductWithVoting(
         result.selectedMethod = bestCandidate.method;
       }
     } else {
-      // No candidates at all - try pure AI extraction
-      if (userId && html) {
+      // No candidates at all - try pure AI extraction (unless disabled for this product)
+      if (userId && html && !skipAiExtraction) {
         console.log(`[Voting] No candidates found, trying AI extraction...`);
         try {
           const { tryAIExtraction } = await import('./ai-extractor');

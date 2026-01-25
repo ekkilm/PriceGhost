@@ -32,7 +32,10 @@ async function checkPrices(): Promise<void> {
         // Check if AI verification is disabled for this product
         const skipAiVerification = await productQueries.isAiVerificationDisabled(product.id);
 
-        console.log(`[Scheduler] Product ${product.id} - preferredMethod: ${preferredMethod}, anchorPrice: ${anchorPrice}, skipAi: ${skipAiVerification}`);
+        // Check if AI extraction is disabled for this product
+        const skipAiExtraction = await productQueries.isAiExtractionDisabled(product.id);
+
+        console.log(`[Scheduler] Product ${product.id} - preferredMethod: ${preferredMethod}, anchorPrice: ${anchorPrice}, skipAiVerify: ${skipAiVerification}, skipAiExtract: ${skipAiExtraction}`);
 
         // Use voting scraper with preferred method and anchor price if available
         const scrapedData = await scrapeProductWithVoting(
@@ -40,7 +43,8 @@ async function checkPrices(): Promise<void> {
           product.user_id,
           preferredMethod as ExtractionMethod | undefined,
           anchorPrice || undefined,
-          skipAiVerification
+          skipAiVerification,
+          skipAiExtraction
         );
 
         console.log(`[Scheduler] Product ${product.id} - scraped price: ${scrapedData.price?.price}, candidates: ${scrapedData.priceCandidates.map(c => `${c.price}(${c.method})`).join(', ')}`);

@@ -326,6 +326,7 @@ export interface Product {
   target_price: number | null;
   notify_back_in_stock: boolean;
   ai_verification_disabled: boolean;
+  ai_extraction_disabled: boolean;
   created_at: Date;
 }
 
@@ -490,6 +491,7 @@ export const productQueries = {
       target_price?: number | null;
       notify_back_in_stock?: boolean;
       ai_verification_disabled?: boolean;
+      ai_extraction_disabled?: boolean;
     }
   ): Promise<Product | null> => {
     const fields: string[] = [];
@@ -519,6 +521,10 @@ export const productQueries = {
     if (updates.ai_verification_disabled !== undefined) {
       fields.push(`ai_verification_disabled = $${paramIndex++}`);
       values.push(updates.ai_verification_disabled);
+    }
+    if (updates.ai_extraction_disabled !== undefined) {
+      fields.push(`ai_extraction_disabled = $${paramIndex++}`);
+      values.push(updates.ai_extraction_disabled);
     }
 
     if (fields.length === 0) return null;
@@ -606,6 +612,14 @@ export const productQueries = {
       [id]
     );
     return result.rows[0]?.ai_verification_disabled === true;
+  },
+
+  isAiExtractionDisabled: async (id: number): Promise<boolean> => {
+    const result = await pool.query(
+      'SELECT ai_extraction_disabled FROM products WHERE id = $1',
+      [id]
+    );
+    return result.rows[0]?.ai_extraction_disabled === true;
   },
 };
 
