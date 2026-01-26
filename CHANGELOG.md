@@ -22,6 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **AI Stock Status Verification** - Separate AI call to verify stock status for variant products
   - When tracking a specific variant price, AI now verifies if that exact variant is in stock
   - Fixes false "in stock" status when other variants are available but tracked variant is not
+- **Pause/Resume Checking** - Temporarily pause price checking on individual products or in bulk
+  - Pause and Resume actions in the bulk Actions menu
+  - Filter dropdown to show All / Active / Paused products
+  - Paused products are greyed out with pause icon indicator
+  - Scheduler automatically skips paused products
 
 ### Fixed
 
