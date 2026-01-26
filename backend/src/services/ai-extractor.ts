@@ -288,11 +288,18 @@ async function extractWithOllama(
       messages: [
         {
           role: 'user',
+          content: '/nothink', // Disable thinking mode for Qwen3/DeepSeek
+        },
+        {
+          role: 'assistant',
+          content: 'Ok.',
+        },
+        {
+          role: 'user',
           content: EXTRACTION_PROMPT + preparedHtml,
         },
       ],
       stream: false,
-      think: false, // Disable thinking mode for Qwen3/DeepSeek models
       options: {
         num_ctx: 16384, // Increase context window for large HTML content
       },
@@ -388,9 +395,12 @@ async function verifyWithOllama(
     `${baseUrl}/api/chat`,
     {
       model: model,
-      messages: [{ role: 'user', content: prompt }],
+      messages: [
+        { role: 'user', content: '/nothink' },
+        { role: 'assistant', content: 'Ok.' },
+        { role: 'user', content: prompt },
+      ],
       stream: false,
-      think: false, // Disable thinking mode for Qwen3/DeepSeek models
       options: {
         num_ctx: 16384, // Increase context window for large HTML content
       },
@@ -484,9 +494,12 @@ async function verifyStockStatusWithOllama(
     `${baseUrl}/api/chat`,
     {
       model: model,
-      messages: [{ role: 'user', content: prompt }],
+      messages: [
+        { role: 'user', content: '/nothink' },
+        { role: 'assistant', content: 'Ok.' },
+        { role: 'user', content: prompt },
+      ],
       stream: false,
-      think: false, // Disable thinking mode for Qwen3/DeepSeek models
       options: {
         num_ctx: 16384, // Increase context window for large HTML content
       },
@@ -943,9 +956,12 @@ async function arbitrateWithOllama(
     `${baseUrl}/api/chat`,
     {
       model: model,
-      messages: [{ role: 'user', content: prompt }],
+      messages: [
+        { role: 'user', content: '/nothink' },
+        { role: 'assistant', content: 'Ok.' },
+        { role: 'user', content: prompt },
+      ],
       stream: false,
-      think: false, // Disable thinking mode for Qwen3/DeepSeek models
       options: {
         num_ctx: 16384, // Increase context window for large HTML content
       },
