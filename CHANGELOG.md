@@ -5,6 +5,42 @@ All notable changes to PriceGhost will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5] - 2026-01-25
+
+### Added
+
+- **AI Model Selector** - Choose your preferred AI model in settings
+  - Anthropic: Claude Haiku 4.5, Sonnet 4.5, Opus 4.5
+  - OpenAI: GPT-4.1 Nano, Mini, and Full
+  - Ollama: Any locally installed model
+- **Per-Product AI Controls** - Disable AI extraction and/or verification on individual products
+  - Useful for products where AI interferes with manual price selection
+  - Separate toggles for extraction (fallback) and verification
+- **Gotify Notification Support** - Self-hosted push notifications via Gotify
+  - Test connection before saving to verify server URL and app token
+  - Full notification support for price drops, target prices, and stock changes
+- **AI Stock Status Verification** - Separate AI call to verify stock status for variant products
+  - When tracking a specific variant price, AI now verifies if that exact variant is in stock
+  - Fixes false "in stock" status when other variants are available but tracked variant is not
+
+### Fixed
+
+- **Ollama Thinking Mode** - Fixed Qwen3 and DeepSeek models outputting `<think>` tags instead of JSON
+  - Added `/nothink` message before prompts to disable thinking mode
+  - Added `num_ctx: 16384` for proper context window (was truncating HTML at 4K)
+  - Added fallback to strip `<think>` tags from responses
+- **AI Stock Status "Unknown"** - AI now correctly returns "out_of_stock" for pre-order/coming soon products
+  - Previously returned "unknown" even when reasoning stated product was unavailable
+  - Prompt now explicitly requires "out_of_stock" when product cannot be purchased
+
+### Changed
+
+- **Recommended AI Models** - Based on testing:
+  - **Cloud**: Claude Haiku 4.5 (best accuracy for the cost)
+  - **Local/Free**: Qwen3 (any size, with thinking mode disabled)
+
+---
+
 ## [1.0.4] - 2026-01-24
 
 ### Added
@@ -162,6 +198,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Description |
 |---------|------|-------------|
+| 1.0.5 | 2026-01-25 | AI model selector, per-product AI controls, Gotify support, Ollama fixes |
 | 1.0.4 | 2026-01-24 | Multi-strategy price voting system with user selection for ambiguous prices |
 | 1.0.3 | 2026-01-24 | Notification history with bell icon, clear button, and full history page |
 | 1.0.2 | 2026-01-23 | Fixed stock status false positives for in-stock items |

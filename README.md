@@ -119,6 +119,7 @@ The cost is minimal (fractions of a cent per API call with Claude Haiku/GPT-4o-m
 - **Discord** - Send alerts to any Discord channel via webhooks
 - **Pushover** - Native Pushover support for mobile push notifications
 - **ntfy.sh** - Simple, no-account push notifications to any device
+- **Gotify** - Self-hosted push notifications via your own Gotify server
 - **Per-channel toggles** - Enable/disable each notification channel independently
 - **Test notifications** - Send test alerts to verify your setup
 
@@ -169,7 +170,7 @@ PriceGhost has **site-specific scrapers** optimized for:
 | **Backend** | Node.js, Express, TypeScript |
 | **Database** | PostgreSQL |
 | **Scraping** | Cheerio, Puppeteer (with stealth plugin) |
-| **AI Extraction** | Anthropic Claude, OpenAI GPT, Ollama (optional but recommended) |
+| **AI Extraction** | Anthropic Claude (Haiku 4.5 recommended), OpenAI GPT, Ollama Qwen3 (optional but recommended) |
 | **Charts** | Recharts |
 | **Auth** | JWT + bcrypt |
 | **Scheduling** | node-cron |
@@ -262,6 +263,12 @@ npm run dev
 3. Enter your topic name in Settings > Notifications
 4. No account or API key needed - it just works!
 
+#### Gotify (Self-Hosted)
+1. Set up a [Gotify server](https://gotify.net/docs/install) on your own infrastructure
+2. Create an application in Gotify to get an App Token
+3. Enter your Gotify server URL and App Token in Settings > Notifications
+4. Use "Test Connection" to verify before saving
+
 ### AI Extraction Setup (Highly Recommended)
 
 For dramatically improved compatibility with difficult sites:
@@ -271,9 +278,22 @@ For dramatically improved compatibility with difficult sites:
 3. Choose your provider:
    - **Anthropic (Claude)** - Get key from [console.anthropic.com](https://console.anthropic.com)
    - **OpenAI (GPT)** - Get key from [platform.openai.com](https://platform.openai.com/api-keys)
-   - **Ollama (Local)** - Free, runs locally. Install from [ollama.ai](https://ollama.ai), then `ollama pull llama3.2`
+   - **Ollama (Local)** - Free, runs locally. Install from [ollama.ai](https://ollama.ai)
 4. Enter your API key (or Ollama server URL for local)
-5. Use "Test Extraction" to verify it works
+5. Select your preferred model
+6. Use "Test Extraction" to verify it works
+
+#### Recommended Models
+
+Based on testing, these models work best with PriceGhost:
+
+| Provider | Model | Notes |
+|----------|-------|-------|
+| **Anthropic** | Claude Haiku 4.5 | ⭐ Best overall - fast, accurate, cheap (~$0.001/check) |
+| **Ollama** | Qwen3 (any size) | ⭐ Best free option - run `ollama pull qwen3` |
+| OpenAI | GPT-4.1 Nano | Good alternative to Haiku |
+
+**Note for Ollama users**: Qwen3 works well for price extraction and verification. Other models (llama3, mistral, deepseek) may struggle with structured JSON output or have thinking mode issues.
 
 The AI automatically activates when standard scraping fails to extract a price, providing a reliable fallback.
 
@@ -310,6 +330,8 @@ The AI automatically activates when standard scraping fails to extract a price, 
 | POST | `/api/settings/notifications/test/discord` | Send test Discord notification |
 | POST | `/api/settings/notifications/test/pushover` | Send test Pushover notification |
 | POST | `/api/settings/notifications/test/ntfy` | Send test ntfy notification |
+| POST | `/api/settings/notifications/test/gotify` | Send test Gotify notification |
+| POST | `/api/settings/notifications/test-gotify` | Test Gotify connection before saving |
 | GET | `/api/settings/ai` | Get AI extraction settings |
 | PUT | `/api/settings/ai` | Update AI settings |
 | POST | `/api/settings/ai/test` | Test AI extraction on a URL |
