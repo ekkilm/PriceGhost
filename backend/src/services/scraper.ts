@@ -256,6 +256,7 @@ async function scrapeWithBrowser(url: string): Promise<string> {
       '--disable-dev-shm-usage',
       '--disable-blink-features=AutomationControlled',
       '--disable-infobars',
+      '--disable-crash-reporter',
       '--window-size=1920,1080',
       '--start-maximized',
     ],
