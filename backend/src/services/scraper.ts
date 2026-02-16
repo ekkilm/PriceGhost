@@ -1260,6 +1260,7 @@ const genericPriceSelectors = [
   '.price-wrapper [data-price-amount]',  // Magento 2 price wrapper
   '.price-box .price',  // Magento price box
   '.special-price .price',  // Magento special/sale price
+  '.product-detail-price',  // Vue/React e-commerce (3dprima.com, etc)
   '.price',
   '.product-price',
   '.current-price',
