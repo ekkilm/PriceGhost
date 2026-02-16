@@ -13,6 +13,7 @@ import {
   PriceHistory,
   NotificationSettings,
 } from '../api/client';
+import { formatPrice as formatCurrency } from '../utils/formatCurrency';
 
 export default function ProductDetail() {
   const { id } = useParams<{ id: string }>();
@@ -160,15 +161,6 @@ export default function ProductDetail() {
     } finally {
       setIsSavingNotifications(false);
     }
-  };
-
-  const formatPrice = (price: number | string | null, currency: string | null) => {
-    if (price === null || price === undefined) return 'N/A';
-    const numPrice = typeof price === 'string' ? parseFloat(price) : price;
-    if (isNaN(numPrice)) return 'N/A';
-    const currencySymbol =
-      currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : currency === 'CHF' ? 'CHF ' : '$';
-    return `${currencySymbol}${numPrice.toFixed(2)}`;
   };
 
   if (isLoading) {
@@ -451,7 +443,7 @@ export default function ProductDetail() {
               <span>
                 {product.stock_status === 'out_of_stock'
                   ? 'Price unavailable'
-                  : formatPrice(product.current_price, product.currency)}
+                  : formatCurrency(product.current_price, product.currency)}
               </span>
               {product.stock_status !== 'out_of_stock' && (
                 <AIStatusBadge status={product.ai_status} />

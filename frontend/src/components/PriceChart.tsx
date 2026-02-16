@@ -10,6 +10,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { PriceHistory } from '../api/client';
+import { getCurrencySymbol } from '../utils/formatCurrency';
 
 const getThemeColors = () => {
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
@@ -58,8 +59,7 @@ export default function PriceChart({
     onRangeChange?.(days);
   };
 
-  const currencySymbol =
-    currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : currency === 'CHF' ? 'CHF ' : '$';
+  const currencySymbol = getCurrencySymbol(currency);
 
   const chartData = prices.map((p) => ({
     date: new Date(p.recorded_at).getTime(),
