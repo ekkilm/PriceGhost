@@ -21,11 +21,13 @@ const currencyMap: Record<string, string> = {
 
 // Patterns to match prices in text
 const pricePatterns = [
-  // $29.99 or $29,99 or $ 29.99
+  // $29.99 or €29,99 or £29.99 (currency symbol BEFORE price)
   /(?<currency>[$€£¥₹])\s*(?<price>[\d,]+\.?\d*)/,
+  // 29,99 € or 29.99 $ or 29,99 £ (currency symbol AFTER price - European format)
+  /(?<price>[\d,]+\.?\d*)\s*(?<currency>[$€£¥₹])/,
   // CHF 29.99 or Fr. 29.99 (Swiss franc prefix)
   /(?<currency>CHF|Fr\.)\s*(?<price>[\d,]+\.?\d*)/i,
-  // 29.99 USD or 29,99 EUR or 29.99 CHF
+  // 29.99 USD or 29,99 EUR or 29.99 CHF (currency code after price)
   /(?<price>[\d,]+\.?\d*)\s*(?<currency>USD|EUR|GBP|CAD|AUD|JPY|INR|CHF)/i,
   // Plain number with optional decimal (fallback)
   /(?<price>\d{1,3}(?:[,.\s]?\d{3})*(?:[.,]\d{2})?)/,
@@ -105,9 +107,9 @@ export function extractPricesFromText(html: string): ParsedPrice[] {
   const prices: ParsedPrice[] = [];
   const seen = new Set<number>();
 
-  // Match all price-like patterns in the HTML
+  // Match all price-like patterns in the HTML (including European format with symbol after)
   const allMatches = html.matchAll(
-    /(?:[$€£¥₹])\s*[\d,]+\.?\d*|(?:CHF|Fr\.)\s*[\d,]+\.?\d*|[\d,]+\.?\d*\s*(?:USD|EUR|GBP|CAD|AUD|CHF)/gi
+    /(?:[$€£¥₹])\s*[\d,]+\.?\d*|[\d,]+\.?\d*\s*(?:[$€£¥₹])|(?:CHF|Fr\.)\s*[\d,]+\.?\d*|[\d,]+\.?\d*\s*(?:USD|EUR|GBP|CAD|AUD|CHF)/gi
   );
 
   for (const match of allMatches) {
