@@ -91,35 +91,99 @@ function extractJsonLdCandidates($: CheerioAPI): PriceCandidate[] {
   const candidates: PriceCandidate[] = [];
   try {
     const scripts = $('script[type="application/ld+json"]');
+    console.log(`[JSON-LD] Found ${scripts.length} JSON-LD script(s)`);
+
+    if (scripts.length === 0) {
+      console.log(`[JSON-LD] No JSON-LD scripts found on page`);
+      return candidates;
+    }
+
     for (let i = 0; i < scripts.length; i++) {
       const content = $(scripts[i]).html();
-      if (!content) continue;
+      if (!content) {
+        console.log(`[JSON-LD] Script ${i + 1}: Empty content, skipping`);
+        continue;
+      }
 
-      const data = JSON.parse(content) as JsonLdProduct | JsonLdProduct[];
-      const product = findProduct(data);
+      try {
+        const data = JSON.parse(content) as JsonLdProduct | JsonLdProduct[];
 
-      if (product?.offers) {
-        const offer = Array.isArray(product.offers) ? product.offers[0] : product.offers;
-        const priceValue = offer.lowPrice || offer.price || offer.priceSpecification?.price;
-        const currency = offer.priceCurrency || offer.priceSpecification?.priceCurrency || 'USD';
-
-        if (priceValue) {
-          const price = parseFloat(String(priceValue));
-          if (!isNaN(price) && price > 0) {
-            candidates.push({
-              price,
-              currency,
-              method: 'json-ld',
-              context: `Structured data: ${product.name || 'Product'}`,
-              confidence: 0.9, // JSON-LD is highly reliable
-            });
+        // Helper function to extract price from a product
+        const extractPriceFromProduct = (product: JsonLdProduct, variantIndex?: number): void => {
+          if (!product.offers) {
+            console.log(`[JSON-LD] Script ${i + 1}${variantIndex !== undefined ? ` Variant ${variantIndex + 1}` : ''}: Product has no 'offers' field`);
+            return;
           }
+
+          const offer = Array.isArray(product.offers) ? product.offers[0] : product.offers;
+          const priceValue = offer.lowPrice || offer.price || offer.priceSpecification?.price;
+          const currency = offer.priceCurrency || offer.priceSpecification?.priceCurrency || 'USD';
+
+          if (!priceValue) {
+            console.log(`[JSON-LD] Script ${i + 1}${variantIndex !== undefined ? ` Variant ${variantIndex + 1}` : ''}: Offer has no price value (lowPrice/price/priceSpecification)`);
+            return;
+          }
+
+          const price = parseFloat(String(priceValue));
+          if (isNaN(price)) {
+            console.log(`[JSON-LD] Script ${i + 1}${variantIndex !== undefined ? ` Variant ${variantIndex + 1}` : ''}: Price "${priceValue}" is not a valid number`);
+            return;
+          }
+          if (price <= 0) {
+            console.log(`[JSON-LD] Script ${i + 1}${variantIndex !== undefined ? ` Variant ${variantIndex + 1}` : ''}: Price ${price} is <= 0`);
+            return;
+          }
+
+          const productName = product.name || 'Product';
+          const context = variantIndex !== undefined
+            ? `Structured data: ${productName} (Variant ${variantIndex + 1})`
+            : `Structured data: ${productName}`;
+
+          console.log(`[JSON-LD] Script ${i + 1}${variantIndex !== undefined ? ` Variant ${variantIndex + 1}` : ''}: Extracted price: ${price} ${currency}`);
+          candidates.push({
+            price,
+            currency,
+            method: 'json-ld',
+            context,
+            confidence: 0.9, // JSON-LD is highly reliable
+          });
+        };
+
+        // Check if this is a ProductGroup with variants
+        const dataObj = Array.isArray(data) ? data[0] : data;
+        if (dataObj && dataObj['@type'] === 'ProductGroup' && dataObj.hasVariant && Array.isArray(dataObj.hasVariant)) {
+          console.log(`[JSON-LD] Script ${i + 1}: Found ProductGroup with ${dataObj.hasVariant.length} variants`);
+
+          // Extract price from each variant
+          dataObj.hasVariant.forEach((variant, idx) => {
+            if (variant['@type'] === 'Product') {
+              extractPriceFromProduct(variant, idx);
+            }
+          });
+
+          continue;
         }
+
+        // Standard Product schema handling
+        const product = findProduct(data);
+
+        if (!product) {
+          console.log(`[JSON-LD] Script ${i + 1}: No Product schema found in JSON-LD (type: ${(dataObj as any)['@type'] || 'unknown'})`);
+          continue;
+        }
+
+        console.log(`[JSON-LD] Script ${i + 1}: Found Product schema (name: "${product.name || 'N/A'}")`);
+        extractPriceFromProduct(product);
+
+      } catch (parseError) {
+        console.log(`[JSON-LD] Script ${i + 1}: JSON parse error: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
       }
     }
-  } catch (_e) {
-    // JSON parse error
+  } catch (e) {
+    console.error(`[JSON-LD] Unexpected error:`, e);
   }
+
+  console.log(`[JSON-LD] Total candidates extracted: ${candidates.length}`);
   return candidates;
 }
 
@@ -131,7 +195,17 @@ function extractSiteSpecificCandidates($: CheerioAPI, url: string): { candidates
   let stockStatus: StockStatus = 'unknown';
 
   const siteScraper = siteScrapers.find((s) => s.match(url));
-  if (siteScraper) {
+
+  if (!siteScraper) {
+    console.log(`[Site-Specific] FAIL: No site-specific scraper for this URL`);
+    console.log(`[Site-Specific] Site-specific scrapers available for: Amazon, eBay, Etsy, Walmart, Target, BestBuy, Newegg, AliExpress, Magento`);
+    return { candidates, name, imageUrl, stockStatus };
+  }
+
+  try {
+    const hostname = url.match(/https?:\/\/([^\/]+)/)?.[1] || 'unknown';
+    console.log(`[Site-Specific] Matched scraper for: ${hostname}`);
+
     const siteResult = siteScraper.scrape($, url) as {
       price?: ParsedPrice | null;
       name?: string | null;
@@ -140,32 +214,43 @@ function extractSiteSpecificCandidates($: CheerioAPI, url: string): { candidates
       allPrices?: ParsedPrice[];  // Some scrapers return multiple prices (e.g., Amazon)
     };
 
+    console.log(`[Site-Specific] Scraper returned: price=${!!siteResult.price}, allPrices=${siteResult.allPrices?.length || 0}, name=${!!siteResult.name}, stock=${siteResult.stockStatus}`);
+
     // If scraper returned multiple prices, add them all as candidates
     if (siteResult.allPrices && siteResult.allPrices.length > 0) {
+      console.log(`[Site-Specific] Found ${siteResult.allPrices.length} price variant(s):`);
       for (const p of siteResult.allPrices) {
+        console.log(`[Site-Specific]   ${p.price} ${p.currency}`);
         candidates.push({
           price: p.price,
           currency: p.currency,
           method: 'site-specific',
-          context: `Site-specific extractor for ${new URL(url).hostname}`,
+          context: `Site-specific extractor for ${hostname}`,
           confidence: 0.85,
         });
       }
     } else if (siteResult.price) {
       // Single price result
+      console.log(`[Site-Specific] SUCCESS: ${siteResult.price.price} ${siteResult.price.currency}`);
       candidates.push({
         price: siteResult.price.price,
         currency: siteResult.price.currency,
         method: 'site-specific',
-        context: `Site-specific extractor for ${new URL(url).hostname}`,
+        context: `Site-specific extractor for ${hostname}`,
         confidence: 0.85,
       });
+    } else {
+      console.log(`[Site-Specific] FAIL: Scraper returned no price`);
     }
+
     name = siteResult.name || null;
     imageUrl = siteResult.imageUrl || null;
     stockStatus = siteResult.stockStatus || 'unknown';
+  } catch (error) {
+    console.error(`[Site-Specific] ERROR:`, error);
   }
 
+  console.log(`[Site-Specific] Total candidates: ${candidates.length}`);
   return { candidates, name, imageUrl, stockStatus };
 }
 
@@ -174,14 +259,24 @@ function extractGenericCssCandidates($: CheerioAPI): PriceCandidate[] {
   const candidates: PriceCandidate[] = [];
   const seen = new Set<number>();
 
+  console.log(`[Generic CSS] Trying ${genericPriceSelectors.length} selectors`);
+
   for (const selector of genericPriceSelectors) {
     const elements = $(selector);
+    if (elements.length === 0) continue; // Skip logging for selectors with no matches
+
+    console.log(`[Generic CSS] Selector "${selector}": found ${elements.length} element(s)`);
+    let skippedOldPrice = 0;
+    let extracted = 0;
+    let failedParse = 0;
+
     elements.each((_, el) => {
       const $el = $(el);
       // Skip if this looks like an "original" or "was" price
       const classAttr = $el.attr('class') || '';
       const parentClass = $el.parent().attr('class') || '';
       if (/original|was|old|regular|compare|strikethrough|line-through/i.test(classAttr + parentClass)) {
+        skippedOldPrice++;
         return;
       }
 
@@ -199,18 +294,38 @@ function extractGenericCssCandidates($: CheerioAPI): PriceCandidate[] {
         const price = parseFloat(priceAmount);
         if (!isNaN(price) && price > 0) {
           let currency = 'USD';
-          const textSources = [text, $el.parent().text(), $el.closest('.price-box').text()];
+          // Search more extensively for currency symbols/codes
+          const textSources = [
+            text,
+            $el.parent().text(),
+            $el.closest('.price-box, .price-container, .product-price, [class*="price"]').text(),
+            $el.siblings().text(),
+            $('meta[property="og:price:currency"]').attr('content'),
+            $('meta[itemprop="priceCurrency"]').attr('content'),
+            $('html').attr('lang'), // Check page language (e.g., "fi" for Finland = EUR)
+          ];
           for (const source of textSources) {
             if (!source) continue;
+
+            // Try currency codes first (more explicit)
             const currencyCodeMatch = source.match(/\b(CHF|EUR|GBP|USD|CAD|AUD|JPY|INR)\b/i);
             if (currencyCodeMatch) {
               currency = currencyCodeMatch[1].toUpperCase();
               break;
             }
+
+            // Try currency symbols (including after price - European format)
             const symbolMatch = source.match(/([$€£¥₹])/);
             if (symbolMatch) {
               const symbolMap: Record<string, string> = { '$': 'USD', '€': 'EUR', '£': 'GBP', '¥': 'JPY', '₹': 'INR' };
               currency = symbolMap[symbolMatch[1]] || 'USD';
+              break;
+            }
+
+            // Infer currency from language code (common in European sites)
+            if (source.startsWith('fi') || source.startsWith('de') || source.startsWith('fr') ||
+                source.startsWith('es') || source.startsWith('it') || source.startsWith('nl')) {
+              currency = 'EUR';
               break;
             }
           }
@@ -222,13 +337,53 @@ function extractGenericCssCandidates($: CheerioAPI): PriceCandidate[] {
       if (!parsed) {
         const priceStr = content || dataPrice || text;
         parsed = parsePrice(priceStr);
+        if (!parsed) {
+          failedParse++;
+          const textPreview = priceStr.trim().slice(0, 100);
+          console.log(`[Generic CSS]   PARSE FAILED: Could not extract price from "${textPreview}"`);
+        }
         if (parsed) {
           context = text.trim().slice(0, 50);
+
+          // If price came from content/dataPrice attribute (numeric only, no currency),
+          // detect currency from the display text or surrounding context
+          if (parsed.currency === 'USD' && (content || dataPrice)) {
+            // Check display text for currency symbols
+            const currencySymbolMatch = text.match(/[€£¥₹]/);
+            if (currencySymbolMatch) {
+              const symbolMap: Record<string, string> = { '€': 'EUR', '£': 'GBP', '¥': 'JPY', '₹': 'INR' };
+              parsed.currency = symbolMap[currencySymbolMatch[0]] || parsed.currency;
+            } else {
+              // Check for currency codes in text
+              const currencyCodeMatch = text.match(/\b(EUR|GBP|CHF|CAD|AUD|JPY|INR)\b/i);
+              if (currencyCodeMatch) {
+                parsed.currency = currencyCodeMatch[1].toUpperCase();
+              } else {
+                // Check meta tags and page language
+                const metaCurrency = $('meta[property="og:price:currency"]').attr('content') ||
+                                     $('meta[itemprop="priceCurrency"]').attr('content');
+                if (metaCurrency) {
+                  parsed.currency = metaCurrency.toUpperCase();
+                } else {
+                  const lang = $('html').attr('lang') || '';
+                  if (/^(fi|de|fr|es|it|nl|pt|el|et|lv|lt|sk|sl|mt)/i.test(lang)) {
+                    parsed.currency = 'EUR';
+                  } else if (/^(en-gb|cy)/i.test(lang)) {
+                    parsed.currency = 'GBP';
+                  } else if (/^ja/i.test(lang)) {
+                    parsed.currency = 'JPY';
+                  }
+                }
+              }
+            }
+          }
         }
       }
 
       if (parsed && parsed.price > 0 && !seen.has(parsed.price)) {
         seen.add(parsed.price);
+        extracted++;
+        console.log(`[Generic CSS]   SUCCESS: ${parsed.price} ${parsed.currency} from "${context}"`);
         candidates.push({
           price: parsed.price,
           currency: parsed.currency,
@@ -239,10 +394,21 @@ function extractGenericCssCandidates($: CheerioAPI): PriceCandidate[] {
       }
     });
 
+    if (elements.length > 0) {
+      console.log(`[Generic CSS] Selector "${selector}": skipped ${skippedOldPrice} old prices, failed ${failedParse} parses, extracted ${extracted}`);
+    }
+
     // Only take first few generic candidates to avoid noise
-    if (candidates.length >= 3) break;
+    if (candidates.length >= 3) {
+      console.log(`[Generic CSS] Stopping early (found 3 candidates)`);
+      break;
+    }
   }
 
+  console.log(`[Generic CSS] Total candidates: ${candidates.length}`);
+  if (candidates.length === 0) {
+    console.log(`[Generic CSS] FAIL: No prices extracted. Tried ${genericPriceSelectors.length} selectors.`);
+  }
   return candidates;
 }
 
@@ -1751,6 +1917,7 @@ interface JsonLdProduct {
   name?: string;
   image?: string | string[] | { url?: string };
   offers?: JsonLdOffer | JsonLdOffer[];
+  hasVariant?: JsonLdProduct[];
 }
 
 interface JsonLdPriceSpecification {
