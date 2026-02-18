@@ -106,7 +106,11 @@ function extractJsonLdCandidates($: CheerioAPI): PriceCandidate[] {
       }
 
       try {
-        const data = JSON.parse(content) as JsonLdProduct | JsonLdProduct[];
+        // Sanitize JSON: Remove control characters that break JSON.parse
+        const sanitized = content.replace(/[\x00-\x1F\x7F]/g, (ch: string) =>
+          ch === '\n' || ch === '\r' || ch === '\t' ? ' ' : ''
+        );
+        const data = JSON.parse(sanitized) as JsonLdProduct | JsonLdProduct[];
 
         // Helper function to extract price from a product
         const extractPriceFromProduct = (product: JsonLdProduct, variantIndex?: number): void => {
@@ -272,9 +276,15 @@ function extractGenericCssCandidates($: CheerioAPI): PriceCandidate[] {
 
     elements.each((_, el) => {
       const $el = $(el);
-      // Skip if this looks like an "original" or "was" price
       const classAttr = $el.attr('class') || '';
       const parentClass = $el.parent().attr('class') || '';
+      const tagName = ($el.prop('tagName') as string || '').toLowerCase();
+
+      if (tagName === 'del' || tagName === 's' || tagName === 'strike') {
+        skippedOldPrice++;
+        return;
+      }
+
       if (/original|was|old|regular|compare|strikethrough|line-through/i.test(classAttr + parentClass)) {
         skippedOldPrice++;
         return;
@@ -284,7 +294,12 @@ function extractGenericCssCandidates($: CheerioAPI): PriceCandidate[] {
       const priceAmount = $el.attr('data-price-amount');
       const dataPrice = $el.attr('data-price');
       const content = $el.attr('content');
-      const text = $el.text();
+
+      let text = $el.text();
+      $el.find('del, s, strike').each((_i: number, strikeEl: any) => {
+        const strikeText = $(strikeEl).text();
+        text = text.replace(strikeText, '');
+      });
 
       let parsed: ParsedPrice | null = null;
       let context = selector;
@@ -1260,7 +1275,6 @@ const genericPriceSelectors = [
   '.price-wrapper [data-price-amount]',  // Magento 2 price wrapper
   '.price-box .price',  // Magento price box
   '.special-price .price',  // Magento special/sale price
-  '.product-detail-price',  // Vue/React e-commerce (3dprima.com, etc)
   '.price',
   '.product-price',
   '.current-price',
