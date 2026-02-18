@@ -61,7 +61,7 @@ export default function Settings() {
   const [aiSettings, setAISettings] = useState<AISettings | null>(null);
   const [aiEnabled, setAIEnabled] = useState(false);
   const [aiVerificationEnabled, setAIVerificationEnabled] = useState(false);
-  const [aiProvider, setAIProvider] = useState<'anthropic' | 'openai' | 'ollama' | 'gemini'>('anthropic');
+  const [aiProvider, setAIProvider] = useState<'anthropic' | 'openai' | 'ollama' | 'gemini' | 'openrouter'>('anthropic');
   const [anthropicApiKey, setAnthropicApiKey] = useState('');
   const [anthropicModel, setAnthropicModel] = useState('');
   const [openaiApiKey, setOpenaiApiKey] = useState('');
@@ -73,6 +73,9 @@ export default function Settings() {
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [geminiModel, setGeminiModel] = useState('');
   const [isTestingGemini, setIsTestingGemini] = useState(false);
+  const [openrouterApiKey, setOpenrouterApiKey] = useState('');
+  const [openrouterModel, setOpenrouterModel] = useState('');
+  const [isTestingOpenRouter, setIsTestingOpenRouter] = useState(false);
   const [isSavingAI, setIsSavingAI] = useState(false);
   const [isTestingAI, setIsTestingAI] = useState(false);
   const [testUrl, setTestUrl] = useState('');
@@ -139,6 +142,8 @@ export default function Settings() {
       setOllamaModel(aiRes.data.ollama_model || '');
       setGeminiApiKey(aiRes.data.gemini_api_key || '');
       setGeminiModel(aiRes.data.gemini_model || '');
+      setOpenrouterApiKey(aiRes.data.openrouter_api_key || '');
+      setOpenrouterModel(aiRes.data.openrouter_model || '');
     } catch {
       setError('Failed to load settings');
     } finally {
@@ -466,12 +471,15 @@ export default function Settings() {
         ollama_model: aiProvider === 'ollama' ? ollamaModel || null : undefined,
         gemini_api_key: geminiApiKey || undefined,
         gemini_model: aiProvider === 'gemini' ? geminiModel || null : undefined,
+        openrouter_api_key: openrouterApiKey || undefined,
+        openrouter_model: aiProvider === 'openrouter' ? openrouterModel || null : undefined,
       });
       setAISettings(response.data);
       setAIVerificationEnabled(response.data.ai_verification_enabled ?? false);
       setAnthropicModel(response.data.anthropic_model || '');
       setOpenaiModel(response.data.openai_model || '');
       setGeminiModel(response.data.gemini_model || '');
+      setOpenrouterModel(response.data.openrouter_model || '');
       setAnthropicApiKey('');
       setOpenaiApiKey('');
       setGeminiApiKey('');
@@ -523,6 +531,27 @@ export default function Settings() {
       setError('Failed to connect to Gemini. Check your API key.');
     } finally {
       setIsTestingGemini(false);
+    }
+  };
+
+  const handleTestOpenRouter = async () => {
+    clearMessages();
+    if (!openrouterApiKey) {
+      setError('Please enter your OpenRouter API key');
+      return;
+    }
+    setIsTestingOpenRouter(true);
+    try {
+      const response = await settingsApi.testOpenRouter(openrouterApiKey, openrouterModel || undefined);
+      if (response.data.success) {
+        setSuccess('Successfully connected to OpenRouter API!');
+      } else {
+        setError(response.data.error || 'Failed to connect to OpenRouter');
+      }
+    } catch {
+      setError('Failed to connect to OpenRouter. Check your API key.');
+    } finally {
+      setIsTestingOpenRouter(false);
     }
   };
 
@@ -1652,7 +1681,7 @@ export default function Settings() {
                       <label>AI Provider</label>
                       <select
                         value={aiProvider}
-                        onChange={(e) => setAIProvider(e.target.value as 'anthropic' | 'openai' | 'ollama' | 'gemini')}
+                        onChange={(e) => setAIProvider(e.target.value as 'anthropic' | 'openai' | 'ollama' | 'gemini' | 'openrouter')}
                         style={{
                           width: '100%',
                           padding: '0.625rem 0.75rem',
@@ -1666,6 +1695,7 @@ export default function Settings() {
                         <option value="anthropic">Anthropic (Claude)</option>
                         <option value="openai">OpenAI (GPT)</option>
                         <option value="gemini">Google (Gemini)</option>
+                        <option value="openrouter">OpenRouter</option>
                         <option value="ollama">Ollama (Local)</option>
                       </select>
                     </div>
@@ -1885,6 +1915,107 @@ export default function Settings() {
                           <p className="hint">
                             Choose a model based on your cost/accuracy needs. Flash Lite is fastest and cheapest.
                             {aiSettings?.gemini_model && ` (currently: ${aiSettings.gemini_model})`}
+                          </p>
+                        </div>
+                      </>
+                    )}
+
+                    {aiProvider === 'openrouter' && (
+                      <>
+                        <div className="settings-form-group">
+                          <label>OpenRouter API Key</label>
+                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <div style={{ flex: 1 }}>
+                              <PasswordInput
+                                value={openrouterApiKey}
+                                onChange={(e) => setOpenrouterApiKey(e.target.value)}
+                                placeholder="sk-or-..."
+                              />
+                            </div>
+                            <button
+                              className="btn btn-secondary"
+                              onClick={handleTestOpenRouter}
+                              disabled={isTestingOpenRouter || !openrouterApiKey}
+                              style={{ whiteSpace: 'nowrap' }}
+                            >
+                              {isTestingOpenRouter ? 'Testing...' : 'Test Key'}
+                            </button>
+                          </div>
+                          <p className="hint">
+                            Get your API key from{' '}
+                            <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">
+                              openrouter.ai/keys
+                            </a>
+                          </p>
+                        </div>
+
+                        <div className="settings-form-group">
+                          <label htmlFor="openrouter-model">Model</label>
+                          <select
+                            id="openrouter-model"
+                            value={[
+                              'google/gemini-2.5-flash',
+                              'google/gemini-3-flash-preview',
+                              'deepseek/deepseek-r1',
+                              'deepseek/deepseek-chat-v3-0324',
+                              'meta-llama/llama-4-maverick',
+                              'anthropic/claude-haiku-4-5-20251001',
+                              'openai/gpt-4.1-nano',
+                            ].includes(openrouterModel) ? openrouterModel : 'custom'}
+                            onChange={(e) => {
+                              setOpenrouterModel(e.target.value === 'custom' ? '' : e.target.value);
+                            }}
+                            style={{
+                              width: '100%',
+                              padding: '0.625rem 0.75rem',
+                              border: '1px solid var(--border)',
+                              borderRadius: '0.375rem',
+                              background: 'var(--background)',
+                              color: 'var(--text)',
+                              fontSize: '0.875rem'
+                            }}
+                          >
+                            <option value="google/gemini-2.5-flash">Google Gemini 2.5 Flash (Fast, cheap)</option>
+                            <option value="google/gemini-3-flash-preview">Google Gemini 3 Flash (Latest)</option>
+                            <option value="deepseek/deepseek-r1">DeepSeek R1 (Reasoning)</option>
+                            <option value="deepseek/deepseek-chat-v3-0324">DeepSeek V3 (Balanced)</option>
+                            <option value="meta-llama/llama-4-maverick">Llama 4 Maverick (Free)</option>
+                            <option value="anthropic/claude-haiku-4-5-20251001">Claude Haiku 4.5 (Fast)</option>
+                            <option value="openai/gpt-4.1-nano">GPT-4.1 Nano (Cheapest)</option>
+                            <option value="custom">Custom model ID...</option>
+                          </select>
+                          {![
+                            'google/gemini-2.5-flash',
+                            'google/gemini-3-flash-preview',
+                            'deepseek/deepseek-r1',
+                            'deepseek/deepseek-chat-v3-0324',
+                            'meta-llama/llama-4-maverick',
+                            'anthropic/claude-haiku-4-5-20251001',
+                            'openai/gpt-4.1-nano',
+                          ].includes(openrouterModel) && (
+                            <input
+                              type="text"
+                              value={openrouterModel}
+                              onChange={(e) => setOpenrouterModel(e.target.value)}
+                              placeholder="e.g. mistralai/mistral-small-3.2-24b-instruct"
+                              style={{
+                                width: '100%',
+                                marginTop: '0.5rem',
+                                padding: '0.625rem 0.75rem',
+                                border: '1px solid var(--border)',
+                                borderRadius: '0.375rem',
+                                background: 'var(--background)',
+                                color: 'var(--text)',
+                                fontSize: '0.875rem'
+                              }}
+                            />
+                          )}
+                          <p className="hint">
+                            Browse all models at{' '}
+                            <a href="https://openrouter.ai/models" target="_blank" rel="noopener noreferrer">
+                              openrouter.ai/models
+                            </a>. Use format: provider/model-name
+                            {aiSettings?.openrouter_model && ` (currently: ${aiSettings.openrouter_model})`}
                           </p>
                         </div>
                       </>

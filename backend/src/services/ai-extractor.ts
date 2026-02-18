@@ -220,6 +220,7 @@ function prepareHtmlForAI(html: string): string {
 const DEFAULT_ANTHROPIC_MODEL = 'claude-haiku-4-5-20251001';
 const DEFAULT_OPENAI_MODEL = 'gpt-4.1-nano-2025-04-14';
 const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash-lite';
+const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
 async function extractWithAnthropic(
   html: string,
@@ -253,9 +254,10 @@ async function extractWithAnthropic(
 async function extractWithOpenAI(
   html: string,
   apiKey: string,
-  model?: string | null
+  model?: string | null,
+  baseURL?: string
 ): Promise<AIExtractionResult> {
-  const openai = new OpenAI({ apiKey });
+  const openai = new OpenAI({ apiKey, ...(baseURL && { baseURL }) });
 
   const preparedHtml = prepareHtmlForAI(html);
   const modelToUse = model || DEFAULT_OPENAI_MODEL;
@@ -271,12 +273,14 @@ async function extractWithOpenAI(
     ],
   });
 
-  const content = response.choices[0]?.message?.content;
+  const message = response.choices[0]?.message;
+  // Some models (DeepSeek R1) put response in reasoning_content instead of content
+  const content = message?.content || (message as unknown as Record<string, unknown>)?.reasoning_content as string;
   if (!content) {
     throw new Error('No response from OpenAI');
   }
 
-  return parseAIResponse(content);
+  return parseAIResponse(stripThinkingTags(content));
 }
 
 async function extractWithOllama(
@@ -383,9 +387,10 @@ async function verifyWithOpenAI(
   scrapedPrice: number,
   currency: string,
   apiKey: string,
-  model?: string | null
+  model?: string | null,
+  baseURL?: string
 ): Promise<AIVerificationResult> {
-  const openai = new OpenAI({ apiKey });
+  const openai = new OpenAI({ apiKey, ...(baseURL && { baseURL }) });
 
   const preparedHtml = prepareHtmlForAI(html);
   const prompt = VERIFICATION_PROMPT
@@ -399,12 +404,13 @@ async function verifyWithOpenAI(
     messages: [{ role: 'user', content: prompt }],
   });
 
-  const content = response.choices[0]?.message?.content;
+  const verifyMsg = response.choices[0]?.message;
+  const content = verifyMsg?.content || (verifyMsg as unknown as Record<string, unknown>)?.reasoning_content as string;
   if (!content) {
     throw new Error('No response from OpenAI');
   }
 
-  return parseVerificationResponse(content, scrapedPrice, currency);
+  return parseVerificationResponse(stripThinkingTags(content), scrapedPrice, currency);
 }
 
 async function verifyWithOllama(
@@ -509,9 +515,10 @@ async function verifyStockStatusWithOpenAI(
   variantPrice: number,
   currency: string,
   apiKey: string,
-  model?: string | null
+  model?: string | null,
+  baseURL?: string
 ): Promise<AIStockStatusResult> {
-  const openai = new OpenAI({ apiKey });
+  const openai = new OpenAI({ apiKey, ...(baseURL && { baseURL }) });
 
   const preparedHtml = prepareHtmlForAI(html);
   const prompt = STOCK_STATUS_PROMPT
@@ -525,12 +532,13 @@ async function verifyStockStatusWithOpenAI(
     messages: [{ role: 'user', content: prompt }],
   });
 
-  const content = response.choices[0]?.message?.content;
+  const stockMsg = response.choices[0]?.message;
+  const content = stockMsg?.content || (stockMsg as unknown as Record<string, unknown>)?.reasoning_content as string;
   if (!content) {
     throw new Error('No response from OpenAI');
   }
 
-  return parseStockStatusResponse(content);
+  return parseStockStatusResponse(stripThinkingTags(content));
 }
 
 async function verifyStockStatusWithOllama(
@@ -813,6 +821,8 @@ export async function extractWithAI(
     return extractWithOllama(html, settings.ollama_base_url, settings.ollama_model);
   } else if (settings.ai_provider === 'gemini' && settings.gemini_api_key) {
     return extractWithGemini(html, settings.gemini_api_key, settings.gemini_model);
+  } else if (settings.ai_provider === 'openrouter' && settings.openrouter_api_key) {
+    return extractWithOpenAI(html, settings.openrouter_api_key, settings.openrouter_model, OPENROUTER_BASE_URL);
   }
 
   throw new Error('No valid AI provider configured');
@@ -849,6 +859,9 @@ export async function tryAIExtraction(
       const modelToUse = settings.gemini_model || DEFAULT_GEMINI_MODEL;
       console.log(`[AI] Using Gemini (${modelToUse}) for ${url}`);
       return await extractWithGemini(html, settings.gemini_api_key, settings.gemini_model);
+    } else if (settings.ai_provider === 'openrouter' && settings.openrouter_api_key) {
+      console.log(`[AI] Using OpenRouter (${settings.openrouter_model || 'default'}) for ${url}`);
+      return await extractWithOpenAI(html, settings.openrouter_api_key, settings.openrouter_model, OPENROUTER_BASE_URL);
     }
 
     return null;
@@ -891,6 +904,9 @@ export async function tryAIVerification(
       const modelToUse = settings.gemini_model || DEFAULT_GEMINI_MODEL;
       console.log(`[AI Verify] Using Gemini (${modelToUse}) to verify $${scrapedPrice} for ${url}`);
       return await verifyWithGemini(html, scrapedPrice, currency, settings.gemini_api_key, settings.gemini_model);
+    } else if (settings.ai_provider === 'openrouter' && settings.openrouter_api_key) {
+      console.log(`[AI Verify] Using OpenRouter (${settings.openrouter_model || 'default'}) to verify $${scrapedPrice} for ${url}`);
+      return await verifyWithOpenAI(html, scrapedPrice, currency, settings.openrouter_api_key, settings.openrouter_model, OPENROUTER_BASE_URL);
     }
 
     console.log(`[AI Verify] Verification enabled but no provider configured`);
@@ -934,6 +950,9 @@ export async function tryAIStockStatusVerification(
       const modelToUse = settings.gemini_model || DEFAULT_GEMINI_MODEL;
       console.log(`[AI Stock] Using Gemini (${modelToUse}) to verify stock status for $${variantPrice} variant at ${url}`);
       return await verifyStockStatusWithGemini(html, variantPrice, currency, settings.gemini_api_key, settings.gemini_model);
+    } else if (settings.ai_provider === 'openrouter' && settings.openrouter_api_key) {
+      console.log(`[AI Stock] Using OpenRouter (${settings.openrouter_model || 'default'}) to verify stock status for $${variantPrice} variant at ${url}`);
+      return await verifyStockStatusWithOpenAI(html, variantPrice, currency, settings.openrouter_api_key, settings.openrouter_model, OPENROUTER_BASE_URL);
     }
 
     console.log(`[AI Stock] No AI provider configured for stock status verification`);
@@ -1009,9 +1028,10 @@ async function arbitrateWithOpenAI(
   html: string,
   candidates: PriceCandidate[],
   apiKey: string,
-  model?: string | null
+  model?: string | null,
+  baseURL?: string
 ): Promise<AIArbitrationResult> {
-  const openai = new OpenAI({ apiKey });
+  const openai = new OpenAI({ apiKey, ...(baseURL && { baseURL }) });
 
   const candidatesList = candidates.map((c, i) =>
     `${i}. ${c.price} ${c.currency} (method: ${c.method}, context: ${c.context || 'none'})`
@@ -1027,7 +1047,8 @@ async function arbitrateWithOpenAI(
     messages: [{ role: 'user', content: prompt }],
   });
 
-  const content = response.choices[0]?.message?.content;
+  const arbMsg = response.choices[0]?.message;
+  const content = arbMsg?.content || (arbMsg as unknown as Record<string, unknown>)?.reasoning_content as string;
   if (!content) {
     throw new Error('No response from OpenAI');
   }
@@ -1188,6 +1209,9 @@ export async function tryAIArbitration(
       const modelToUse = settings.gemini_model || DEFAULT_GEMINI_MODEL;
       console.log(`[AI Arbitrate] Using Gemini (${modelToUse}) to arbitrate ${candidates.length} prices for ${url}`);
       return await arbitrateWithGemini(html, candidates, settings.gemini_api_key, settings.gemini_model);
+    } else if (settings.ai_provider === 'openrouter' && settings.openrouter_api_key) {
+      console.log(`[AI Arbitrate] Using OpenRouter (${settings.openrouter_model || 'default'}) to arbitrate ${candidates.length} prices for ${url}`);
+      return await arbitrateWithOpenAI(html, candidates, settings.openrouter_api_key, settings.openrouter_model, OPENROUTER_BASE_URL);
     }
 
     console.log(`[AI Arbitrate] No provider configured`);

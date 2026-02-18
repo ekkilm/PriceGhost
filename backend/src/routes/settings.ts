@@ -339,6 +339,8 @@ router.get('/ai', async (req: AuthRequest, res: Response) => {
       ollama_model: settings.ollama_model || null,
       gemini_api_key: settings.gemini_api_key || null,
       gemini_model: settings.gemini_model || null,
+      openrouter_api_key: settings.openrouter_api_key || null,
+      openrouter_model: settings.openrouter_model || null,
     });
   } catch (error) {
     console.error('Error fetching AI settings:', error);
@@ -362,6 +364,8 @@ router.put('/ai', async (req: AuthRequest, res: Response) => {
       ollama_model,
       gemini_api_key,
       gemini_model,
+      openrouter_api_key,
+      openrouter_model,
     } = req.body;
 
     const settings = await userQueries.updateAISettings(userId, {
@@ -376,6 +380,8 @@ router.put('/ai', async (req: AuthRequest, res: Response) => {
       ollama_model,
       gemini_api_key,
       gemini_model,
+      openrouter_api_key,
+      openrouter_model,
     });
 
     if (!settings) {
@@ -395,6 +401,8 @@ router.put('/ai', async (req: AuthRequest, res: Response) => {
       ollama_model: settings.ollama_model || null,
       gemini_api_key: settings.gemini_api_key || null,
       gemini_model: settings.gemini_model || null,
+      openrouter_api_key: settings.openrouter_api_key || null,
+      openrouter_model: settings.openrouter_model || null,
       message: 'AI settings updated successfully',
     });
   } catch (error) {
@@ -517,6 +525,42 @@ router.post('/ai/test-gemini', async (req: AuthRequest, res: Response) => {
         success: false,
       });
     }
+  }
+});
+
+// Test OpenRouter API key
+router.post('/ai/test-openrouter', async (req: AuthRequest, res: Response) => {
+  try {
+    const { api_key, model } = req.body;
+
+    if (!api_key) {
+      res.status(400).json({ error: 'API key is required' });
+      return;
+    }
+
+    const OpenAI = (await import('openai')).default;
+    const client = new OpenAI({
+      apiKey: api_key,
+      baseURL: 'https://openrouter.ai/api/v1',
+    });
+
+    await client.chat.completions.create({
+      model: model || 'openai/gpt-4.1-nano',
+      max_tokens: 10,
+      messages: [{ role: 'user', content: 'Say "ok"' }],
+    });
+
+    res.json({
+      success: true,
+      message: 'Successfully connected to OpenRouter API',
+    });
+  } catch (error) {
+    console.error('Error testing OpenRouter connection:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    res.status(400).json({
+      error: `Failed to connect to OpenRouter: ${errorMessage}`,
+      success: false,
+    });
   }
 });
 
