@@ -9,6 +9,7 @@ build/
 .env
 .env.local
 .env.*.local
+build_docker_local.bat
 
 # IDE
 .idea/
