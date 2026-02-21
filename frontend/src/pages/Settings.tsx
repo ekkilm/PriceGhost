@@ -76,6 +76,37 @@ export default function Settings() {
   const [openrouterApiKey, setOpenrouterApiKey] = useState('');
   const [openrouterModel, setOpenrouterModel] = useState('');
   const [isTestingOpenRouter, setIsTestingOpenRouter] = useState(false);
+  const [subagentApiKey, setSubagentApiKey] = useState('');
+  const [subagentModel, setSubagentModel] = useState('');
+  const [isSubagentCustomModel, setIsSubagentCustomModel] = useState(false);
+  const [subagentValidateUrls, setSubagentValidateUrls] = useState(true);
+  const DEFAULT_SUBAGENT_PROMPT = `You are a price comparison assistant with web search. Find this exact product at other online stores and return current prices with direct product page URLs.
+
+Return a JSON array with these fields:
+- store: The store name (string)
+- price: The current selling price as a number
+- currency: The currency code (EUR, USD, etc.)
+- url: Direct product page URL where the price is visible
+
+Important:
+- Every URL must be a direct product page (e.g. /product/12345 or /p/product-name-sku)
+- Never return store homepages, search result pages, category listings, or price comparison sites
+- Only include prices you found on actual product pages
+- Prioritize Finnish stores (.fi / .com) first, then Nordic/EU stores that ship to Finland
+- Only return valid JSON array, no explanation text
+
+Product search query:
+`;
+  const [subagentCustomPrompt, setSubagentCustomPrompt] = useState('');
+  const [isTestingSubAgent, setIsTestingSubAgent] = useState(false);
+  const handlePromptFileUpload = (e: { target: { files: FileList | null; value: string } }) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setSubagentCustomPrompt(reader.result as string);
+    reader.readAsText(file);
+    e.target.value = '';
+  };
   const [isSavingAI, setIsSavingAI] = useState(false);
   const [isTestingAI, setIsTestingAI] = useState(false);
   const [testUrl, setTestUrl] = useState('');
@@ -144,6 +175,12 @@ export default function Settings() {
       setGeminiModel(aiRes.data.gemini_model || '');
       setOpenrouterApiKey(aiRes.data.openrouter_api_key || '');
       setOpenrouterModel(aiRes.data.openrouter_model || '');
+      setSubagentApiKey(aiRes.data.subagent_api_key || '');
+      setSubagentModel(aiRes.data.subagent_model || '');
+      const presets = ['perplexity/sonar-pro', 'perplexity/sonar', 'google/gemini-2.5-flash:online', 'google/gemini-2.5-pro:online', 'openai/gpt-4.1-mini:online'];
+      setIsSubagentCustomModel(!!aiRes.data.subagent_model && !presets.includes(aiRes.data.subagent_model));
+      setSubagentValidateUrls(aiRes.data.subagent_validate_urls ?? true);
+      setSubagentCustomPrompt(aiRes.data.subagent_custom_prompt || DEFAULT_SUBAGENT_PROMPT);
     } catch {
       setError('Failed to load settings');
     } finally {
@@ -473,6 +510,10 @@ export default function Settings() {
         gemini_model: aiProvider === 'gemini' ? geminiModel || null : undefined,
         openrouter_api_key: openrouterApiKey || undefined,
         openrouter_model: aiProvider === 'openrouter' ? openrouterModel || null : undefined,
+        subagent_api_key: subagentApiKey || undefined,
+        subagent_model: subagentModel || undefined,
+        subagent_validate_urls: subagentValidateUrls,
+        subagent_custom_prompt: subagentCustomPrompt && subagentCustomPrompt !== DEFAULT_SUBAGENT_PROMPT ? subagentCustomPrompt : null,
       });
       setAISettings(response.data);
       setAIVerificationEnabled(response.data.ai_verification_enabled ?? false);
@@ -480,6 +521,9 @@ export default function Settings() {
       setOpenaiModel(response.data.openai_model || '');
       setGeminiModel(response.data.gemini_model || '');
       setOpenrouterModel(response.data.openrouter_model || '');
+      setSubagentApiKey(response.data.subagent_api_key || '');
+      setSubagentModel(response.data.subagent_model || '');
+      setSubagentValidateUrls(response.data.subagent_validate_urls ?? true);
       setAnthropicApiKey('');
       setOpenaiApiKey('');
       setGeminiApiKey('');
@@ -552,6 +596,31 @@ export default function Settings() {
       setError('Failed to connect to OpenRouter. Check your API key.');
     } finally {
       setIsTestingOpenRouter(false);
+    }
+  };
+
+  const handleTestSubAgent = async () => {
+    clearMessages();
+    if (!subagentApiKey) {
+      setError('Please enter your Sub-Agent API key');
+      return;
+    }
+    if (!subagentModel) {
+      setError('Please select a Sub-Agent model');
+      return;
+    }
+    setIsTestingSubAgent(true);
+    try {
+      const response = await settingsApi.testSubAgent(subagentApiKey, subagentModel);
+      if (response.data.success) {
+        setSuccess('Successfully connected to Sub-Agent via OpenRouter!');
+      } else {
+        setError(response.data.error || 'Failed to connect to Sub-Agent');
+      }
+    } catch {
+      setError('Failed to connect to Sub-Agent. Check your API key and model.');
+    } finally {
+      setIsTestingSubAgent(false);
     }
   };
 
@@ -668,6 +737,10 @@ export default function Settings() {
           display: flex;
           gap: 2rem;
           min-height: calc(100vh - 200px);
+        }
+
+        .settings-mobile-dropdown {
+          display: none;
         }
 
         .settings-sidebar {
@@ -998,16 +1071,36 @@ export default function Settings() {
 
           .settings-sidebar {
             width: 100%;
+            position: sticky;
+            top: 64px;
+            z-index: 50;
+            background: var(--background);
+            padding-bottom: 0.5rem;
           }
 
-          .settings-nav {
-            position: static;
-            display: flex;
-            overflow-x: auto;
+          .settings-mobile-dropdown {
+            display: block;
+            width: 100%;
+            padding: 0.75rem 1rem;
+            font-size: 0.9375rem;
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            background: var(--surface);
+            color: var(--text);
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
           }
 
-          .settings-nav-item {
-            flex-shrink: 0;
+          .settings-nav,
+          .settings-version-info {
+            display: none;
+          }
+
+          .settings-content {
+            padding-top: 0;
           }
         }
       `}</style>
@@ -1024,6 +1117,17 @@ export default function Settings() {
 
       <div className="settings-container">
         <div className="settings-sidebar">
+          <select
+            className="settings-mobile-dropdown"
+            title="Settings section"
+            value={activeSection}
+            onChange={(e: { target: { value: string } }) => { setActiveSection(e.target.value as SettingsSection); clearMessages(); }}
+          >
+            <option value="profile">Profile</option>
+            <option value="notifications">Notifications</option>
+            <option value="ai">AI Extraction</option>
+            {profile?.is_admin && <option value="admin">Admin</option>}
+          </select>
           <nav className="settings-nav">
             <button
               className={`settings-nav-item ${activeSection === 'profile' ? 'active' : ''}`}
@@ -1071,7 +1175,7 @@ export default function Settings() {
 
           {/* Version Info */}
           {versionInfo && (
-            <div style={{
+            <div className="settings-version-info" style={{
               marginTop: 'auto',
               paddingTop: '1.5rem',
               borderTop: '1px solid var(--border)',
@@ -2033,6 +2137,176 @@ export default function Settings() {
                   </button>
                 </div>
               </div>
+
+              {aiEnabled && (
+                <div className="settings-section">
+                  <div className="settings-section-header">
+                    <span className="settings-section-icon">🔍</span>
+                    <h2 className="settings-section-title">Price Search Sub-Agent</h2>
+                  </div>
+                  <p className="settings-section-description">
+                    Configure a secondary AI agent that searches the internet for better prices on your tracked products.
+                    Uses OpenRouter with a search-capable model (e.g., Perplexity Sonar Pro).
+                  </p>
+
+                  <div className="settings-form-group">
+                    <label>Sub-Agent API Key (OpenRouter)</label>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <div style={{ flex: 1 }}>
+                        <PasswordInput
+                          value={subagentApiKey}
+                          onChange={(e) => setSubagentApiKey(e.target.value)}
+                          placeholder="sk-or-..."
+                        />
+                      </div>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={handleTestSubAgent}
+                        disabled={isTestingSubAgent || !subagentApiKey || !subagentModel}
+                        style={{ whiteSpace: 'nowrap' }}
+                      >
+                        {isTestingSubAgent ? 'Testing...' : 'Test'}
+                      </button>
+                    </div>
+                    <p className="hint">
+                      Separate API key for the sub-agent. Get one from{' '}
+                      <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer">
+                        openrouter.ai/keys
+                      </a>
+                    </p>
+                  </div>
+
+                  <div className="settings-form-group">
+                    <label htmlFor="subagent-model">Model</label>
+                    <select
+                      id="subagent-model"
+                      value={isSubagentCustomModel ? 'custom' : subagentModel}
+                      onChange={(e) => {
+                        if (e.target.value === 'custom') {
+                          setIsSubagentCustomModel(true);
+                          setSubagentModel('');
+                        } else {
+                          setIsSubagentCustomModel(false);
+                          setSubagentModel(e.target.value);
+                        }
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '0.625rem 0.75rem',
+                        border: '1px solid var(--border)',
+                        borderRadius: '0.375rem',
+                        background: 'var(--background)',
+                        color: 'var(--text)',
+                        fontSize: '0.875rem'
+                      }}
+                    >
+                      <option value="perplexity/sonar-pro">Perplexity Sonar Pro (Best search quality)</option>
+                      <option value="perplexity/sonar">Perplexity Sonar (Cheaper search)</option>
+                      <option value="google/gemini-2.5-flash:online">Gemini 2.5 Flash :online</option>
+                      <option value="google/gemini-2.5-pro:online">Gemini 2.5 Pro :online</option>
+                      <option value="openai/gpt-4.1-mini:online">GPT-4.1 Mini :online</option>
+                      <option value="custom">Custom model ID...</option>
+                    </select>
+                    {isSubagentCustomModel && (
+                      <input
+                        type="text"
+                        value={subagentModel}
+                        onChange={(e) => setSubagentModel(e.target.value)}
+                        placeholder="e.g. perplexity/sonar-deep-research"
+                        style={{
+                          width: '100%',
+                          marginTop: '0.5rem',
+                          padding: '0.625rem 0.75rem',
+                          border: '1px solid var(--border)',
+                          borderRadius: '0.375rem',
+                          background: 'var(--background)',
+                          color: 'var(--text)',
+                          fontSize: '0.875rem'
+                        }}
+                      />
+                    )}
+                    <p className="hint">
+                      Choose a model with web search capability for best results.
+                      {aiSettings?.subagent_model && ` (currently: ${aiSettings.subagent_model})`}
+                    </p>
+                  </div>
+
+                  <div className="settings-toggle">
+                    <div className="settings-toggle-label">
+                      <span className="settings-toggle-title">Validate returned URLs</span>
+                      <span className="settings-toggle-description">
+                        Verifies that returned links are reachable (filters out hallucinated URLs).
+                        Disable if using a search-grounded model like Perplexity Sonar.
+                      </span>
+                    </div>
+                    <button
+                      className={`toggle-switch ${subagentValidateUrls ? 'active' : ''}`}
+                      onClick={() => setSubagentValidateUrls(!subagentValidateUrls)}
+                    />
+                  </div>
+
+                  <div className="settings-form-group">
+                    <label>Custom Search Prompt</label>
+                    <textarea
+                      value={subagentCustomPrompt}
+                      onChange={(e) => setSubagentCustomPrompt(e.target.value)}
+                      rows={10}
+                      style={{
+                        width: '100%',
+                        padding: '0.625rem 0.75rem',
+                        border: '1px solid var(--border)',
+                        borderRadius: '0.375rem',
+                        background: 'var(--background)',
+                        color: 'var(--text)',
+                        fontSize: '0.8125rem',
+                        fontFamily: 'monospace',
+                        resize: 'vertical',
+                      }}
+                    />
+                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                      <label
+                        style={{
+                          padding: '0.375rem 0.75rem',
+                          fontSize: '0.8125rem',
+                          border: '1px solid var(--border)',
+                          borderRadius: '0.375rem',
+                          cursor: 'pointer',
+                          color: 'var(--text-muted)',
+                        }}
+                      >
+                        Upload .md / .txt
+                        <input
+                          type="file"
+                          accept=".md,.txt"
+                          style={{ display: 'none' }}
+                          onChange={handlePromptFileUpload}
+                        />
+                      </label>
+                      {subagentCustomPrompt !== DEFAULT_SUBAGENT_PROMPT && (
+                        <button
+                          type="button"
+                          onClick={() => setSubagentCustomPrompt(DEFAULT_SUBAGENT_PROMPT)}
+                          style={{
+                            padding: '0.375rem 0.75rem',
+                            fontSize: '0.8125rem',
+                            border: '1px solid var(--border)',
+                            borderRadius: '0.375rem',
+                            background: 'none',
+                            cursor: 'pointer',
+                            color: 'var(--text-muted)',
+                          }}
+                        >
+                          Reset to Default
+                        </button>
+                      )}
+                    </div>
+                    <p className="hint">
+                      Customize the instructions sent to the search model. Product details (name, brand, EAN, price) are automatically appended.
+                      Leave empty to use the built-in default prompt.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {aiSettings?.ai_enabled && (aiSettings.anthropic_api_key || aiSettings.openai_api_key || (aiSettings.ollama_base_url && aiSettings.ollama_model) || aiSettings.gemini_api_key) && (
                 <div className="settings-section">
