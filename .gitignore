@@ -10,6 +10,7 @@ build/
 .env.local
 .env.*.local
 build_docker_local.bat
+docker-compose.*.yml
 
 # IDE
 .idea/
