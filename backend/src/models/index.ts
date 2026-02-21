@@ -54,6 +54,10 @@ export interface AISettings {
   gemini_model: string | null;
   openrouter_api_key: string | null;
   openrouter_model: string | null;
+  subagent_api_key: string | null;
+  subagent_model: string | null;
+  subagent_validate_urls: boolean;
+  subagent_custom_prompt: string | null;
 }
 
 export const userQueries = {
@@ -251,7 +255,10 @@ export const userQueries = {
       `SELECT ai_enabled, COALESCE(ai_verification_enabled, false) as ai_verification_enabled,
               ai_provider, anthropic_api_key, anthropic_model, openai_api_key, openai_model,
               ollama_base_url, ollama_model, gemini_api_key, gemini_model,
-              openrouter_api_key, openrouter_model
+              openrouter_api_key, openrouter_model,
+              subagent_api_key, subagent_model,
+              COALESCE(subagent_validate_urls, true) as subagent_validate_urls,
+              subagent_custom_prompt
        FROM users WHERE id = $1`,
       [id]
     );
@@ -318,6 +325,22 @@ export const userQueries = {
       fields.push(`openrouter_model = $${paramIndex++}`);
       values.push(settings.openrouter_model);
     }
+    if (settings.subagent_api_key !== undefined) {
+      fields.push(`subagent_api_key = $${paramIndex++}`);
+      values.push(settings.subagent_api_key);
+    }
+    if (settings.subagent_model !== undefined) {
+      fields.push(`subagent_model = $${paramIndex++}`);
+      values.push(settings.subagent_model);
+    }
+    if (settings.subagent_validate_urls !== undefined) {
+      fields.push(`subagent_validate_urls = $${paramIndex++}`);
+      values.push(settings.subagent_validate_urls);
+    }
+    if (settings.subagent_custom_prompt !== undefined) {
+      fields.push(`subagent_custom_prompt = $${paramIndex++}`);
+      values.push(settings.subagent_custom_prompt);
+    }
 
     if (fields.length === 0) return null;
 
@@ -327,7 +350,10 @@ export const userQueries = {
        RETURNING ai_enabled, COALESCE(ai_verification_enabled, false) as ai_verification_enabled,
                  ai_provider, anthropic_api_key, anthropic_model, openai_api_key, openai_model,
                  ollama_base_url, ollama_model, gemini_api_key, gemini_model,
-                 openrouter_api_key, openrouter_model`,
+                 openrouter_api_key, openrouter_model,
+                 subagent_api_key, subagent_model,
+                 COALESCE(subagent_validate_urls, true) as subagent_validate_urls,
+                 subagent_custom_prompt`,
       values
     );
     return result.rows[0] || null;

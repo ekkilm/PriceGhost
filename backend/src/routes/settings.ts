@@ -341,6 +341,10 @@ router.get('/ai', async (req: AuthRequest, res: Response) => {
       gemini_model: settings.gemini_model || null,
       openrouter_api_key: settings.openrouter_api_key || null,
       openrouter_model: settings.openrouter_model || null,
+      subagent_api_key: settings.subagent_api_key || null,
+      subagent_model: settings.subagent_model || null,
+      subagent_validate_urls: settings.subagent_validate_urls ?? true,
+      subagent_custom_prompt: settings.subagent_custom_prompt || null,
     });
   } catch (error) {
     console.error('Error fetching AI settings:', error);
@@ -366,6 +370,10 @@ router.put('/ai', async (req: AuthRequest, res: Response) => {
       gemini_model,
       openrouter_api_key,
       openrouter_model,
+      subagent_api_key,
+      subagent_model,
+      subagent_validate_urls,
+      subagent_custom_prompt,
     } = req.body;
 
     const settings = await userQueries.updateAISettings(userId, {
@@ -382,6 +390,10 @@ router.put('/ai', async (req: AuthRequest, res: Response) => {
       gemini_model,
       openrouter_api_key,
       openrouter_model,
+      subagent_api_key,
+      subagent_model,
+      subagent_validate_urls,
+      subagent_custom_prompt,
     });
 
     if (!settings) {
@@ -403,6 +415,10 @@ router.put('/ai', async (req: AuthRequest, res: Response) => {
       gemini_model: settings.gemini_model || null,
       openrouter_api_key: settings.openrouter_api_key || null,
       openrouter_model: settings.openrouter_model || null,
+      subagent_api_key: settings.subagent_api_key || null,
+      subagent_model: settings.subagent_model || null,
+      subagent_validate_urls: settings.subagent_validate_urls ?? true,
+      subagent_custom_prompt: settings.subagent_custom_prompt || null,
       message: 'AI settings updated successfully',
     });
   } catch (error) {
@@ -559,6 +575,46 @@ router.post('/ai/test-openrouter', async (req: AuthRequest, res: Response) => {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     res.status(400).json({
       error: `Failed to connect to OpenRouter: ${errorMessage}`,
+      success: false,
+    });
+  }
+});
+
+// Test Sub-Agent API key
+router.post('/ai/test-subagent', async (req: AuthRequest, res: Response) => {
+  try {
+    const { api_key, model } = req.body;
+
+    if (!api_key) {
+      res.status(400).json({ error: 'API key is required' });
+      return;
+    }
+    if (!model) {
+      res.status(400).json({ error: 'Model is required' });
+      return;
+    }
+
+    const OpenAI = (await import('openai')).default;
+    const client = new OpenAI({
+      apiKey: api_key,
+      baseURL: 'https://openrouter.ai/api/v1',
+    });
+
+    await client.chat.completions.create({
+      model,
+      max_tokens: 10,
+      messages: [{ role: 'user', content: 'Say "ok"' }],
+    });
+
+    res.json({
+      success: true,
+      message: 'Successfully connected to Sub-Agent via OpenRouter',
+    });
+  } catch (error) {
+    console.error('Error testing Sub-Agent connection:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    res.status(400).json({
+      error: `Failed to connect: ${errorMessage}`,
       success: false,
     });
   }

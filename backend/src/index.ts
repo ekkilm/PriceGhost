@@ -161,6 +161,18 @@ async function runMigrations() {
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'openrouter_model') THEN
           ALTER TABLE users ADD COLUMN openrouter_model TEXT;
         END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'subagent_api_key') THEN
+          ALTER TABLE users ADD COLUMN subagent_api_key TEXT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'subagent_model') THEN
+          ALTER TABLE users ADD COLUMN subagent_model TEXT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'subagent_validate_urls') THEN
+          ALTER TABLE users ADD COLUMN subagent_validate_urls BOOLEAN DEFAULT true;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'subagent_custom_prompt') THEN
+          ALTER TABLE users ADD COLUMN subagent_custom_prompt TEXT;
+        END IF;
       END $$;
     `);
 

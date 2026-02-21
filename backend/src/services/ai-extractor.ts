@@ -277,7 +277,7 @@ async function extractWithOpenAI(
   // Some models (DeepSeek R1) put response in reasoning_content instead of content
   const content = message?.content || (message as unknown as Record<string, unknown>)?.reasoning_content as string;
   if (!content) {
-    throw new Error('No response from OpenAI');
+    throw new Error(`Empty response from model ${modelToUse}`);
   }
 
   return parseAIResponse(stripThinkingTags(content));
@@ -407,7 +407,7 @@ async function verifyWithOpenAI(
   const verifyMsg = response.choices[0]?.message;
   const content = verifyMsg?.content || (verifyMsg as unknown as Record<string, unknown>)?.reasoning_content as string;
   if (!content) {
-    throw new Error('No response from OpenAI');
+    throw new Error(`Empty response from model ${modelToUse}`);
   }
 
   return parseVerificationResponse(stripThinkingTags(content), scrapedPrice, currency);
@@ -535,7 +535,7 @@ async function verifyStockStatusWithOpenAI(
   const stockMsg = response.choices[0]?.message;
   const content = stockMsg?.content || (stockMsg as unknown as Record<string, unknown>)?.reasoning_content as string;
   if (!content) {
-    throw new Error('No response from OpenAI');
+    throw new Error(`Empty response from model ${modelToUse}`);
   }
 
   return parseStockStatusResponse(stripThinkingTags(content));
@@ -781,7 +781,7 @@ function parseAIResponse(responseText: string): AIExtractionResult {
       price,
       imageUrl: data.imageUrl || data.image || null,
       stockStatus,
-      confidence: data.confidence || 0.5,
+      confidence: typeof data.confidence === 'number' ? data.confidence : 0.5,
     };
   } catch (error) {
     console.error('Failed to parse AI response:', responseText);
@@ -1050,7 +1050,7 @@ async function arbitrateWithOpenAI(
   const arbMsg = response.choices[0]?.message;
   const content = arbMsg?.content || (arbMsg as unknown as Record<string, unknown>)?.reasoning_content as string;
   if (!content) {
-    throw new Error('No response from OpenAI');
+    throw new Error(`Empty response from model ${modelToUse}`);
   }
 
   return parseArbitrationResponse(content, candidates);
@@ -1220,4 +1220,262 @@ export async function tryAIArbitration(
     console.error(`[AI Arbitrate] Arbitration failed for ${url}:`, error);
     return null;
   }
+}
+
+// --- Sub-Agent: Find Better Prices ---
+
+export interface PriceComparison {
+  store: string;
+  price: number;
+  currency: string;
+  url: string;
+}
+
+interface ProductIdentity {
+  searchTerm: string;
+  brand: string | null;
+  model: string | null;
+  ean: string | null;
+}
+
+const SUBAGENT_SEARCH_PROMPT = `You are a price comparison assistant with web search. Find this exact product at other online stores and return current prices with direct product page URLs.
+
+Return a JSON array with these fields:
+- store: The store name (string)
+- price: The current selling price as a number
+- currency: The currency code (EUR, USD, etc.)
+- url: Direct product page URL where the price is visible
+
+Important:
+- Every URL must be a direct product page (e.g. /product/12345 or /p/product-name-sku)
+- Never return store homepages, search result pages, category listings, or price comparison sites
+- Only include prices you found on actual product pages
+- Prioritize Finnish stores (.fi / .com) first, then Nordic/EU stores that ship to Finland
+- Only return valid JSON array, no explanation text
+
+Product search query:
+`;
+
+const PRODUCT_IDENTITY_PROMPT = `Analyze this product page HTML and extract key product identifiers for searching.
+
+Return a JSON object:
+- searchTerm: a clean, concise product name suitable for web search (brand + model + key specs, no store name or marketing text)
+- brand: the brand/manufacturer name (or null)
+- model: the model number/name (or null)
+- ean: EAN, UPC, GTIN, or SKU code if found in the page (or null)
+
+Only return valid JSON, no explanation text.
+
+HTML Content:
+`;
+
+async function extractProductIdentity(
+  productUrl: string,
+  productName: string,
+  settings: AISettings
+): Promise<ProductIdentity> {
+  // Default fallback: use the DB product name as-is
+  const fallback: ProductIdentity = { searchTerm: productName, brand: null, model: null, ean: null };
+
+  // Check if main AI is configured
+  if (!settings.ai_enabled || !settings.ai_provider) {
+    console.log('[Sub-Agent] Main AI not configured, using raw product name');
+    return fallback;
+  }
+
+  try {
+    const response = await axios.get<string>(productUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+      timeout: 20000,
+    });
+
+    const html = response.data;
+    const preparedHtml = prepareHtmlForAI(html);
+    const prompt = PRODUCT_IDENTITY_PROMPT + preparedHtml;
+
+    let content: string | null = null;
+
+    if (settings.ai_provider === 'openrouter' && settings.openrouter_api_key) {
+      const client = new OpenAI({ apiKey: settings.openrouter_api_key, baseURL: OPENROUTER_BASE_URL });
+      const res = await client.chat.completions.create({
+        model: settings.openrouter_model || 'openai/gpt-4.1-nano',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1,
+      });
+      const msg = res.choices[0]?.message;
+      content = msg?.content || (msg as unknown as Record<string, unknown>)?.reasoning_content as string;
+    } else if (settings.ai_provider === 'anthropic' && settings.anthropic_api_key) {
+      const anthropic = new Anthropic({ apiKey: settings.anthropic_api_key });
+      const res = await anthropic.messages.create({
+        model: settings.anthropic_model || 'claude-haiku-4-5-20251001',
+        max_tokens: 500,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      content = res.content[0]?.type === 'text' ? res.content[0].text : null;
+    } else if (settings.ai_provider === 'openai' && settings.openai_api_key) {
+      const client = new OpenAI({ apiKey: settings.openai_api_key });
+      const res = await client.chat.completions.create({
+        model: settings.openai_model || 'gpt-4.1-nano',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.1,
+      });
+      content = res.choices[0]?.message?.content;
+    } else if (settings.ai_provider === 'gemini' && settings.gemini_api_key) {
+      const genAI = new GoogleGenerativeAI(settings.gemini_api_key);
+      const model = genAI.getGenerativeModel({ model: settings.gemini_model || 'gemini-2.5-flash-lite' });
+      const res = await model.generateContent(prompt);
+      content = res.response.text();
+    } else if (settings.ai_provider === 'ollama' && settings.ollama_base_url && settings.ollama_model) {
+      const res = await axios.post(`${settings.ollama_base_url}/api/generate`, {
+        model: settings.ollama_model,
+        prompt,
+        stream: false,
+      }, { timeout: 60000 });
+      content = res.data?.response;
+    }
+
+    if (!content) {
+      console.log('[Sub-Agent] Main AI returned no content for product identity');
+      return fallback;
+    }
+
+    content = stripThinkingTags(content);
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.log('[Sub-Agent] No JSON found in main AI response');
+      return fallback;
+    }
+
+    const identity = JSON.parse(jsonMatch[0]) as ProductIdentity;
+    console.log(`[Sub-Agent] Main AI identified product: "${identity.searchTerm}" (brand: ${identity.brand}, model: ${identity.model}, ean: ${identity.ean})`);
+    return identity;
+  } catch (error) {
+    console.error('[Sub-Agent] Failed to extract product identity:', error);
+    return fallback;
+  }
+}
+
+export async function findBetterPrices(
+  productName: string,
+  currentPrice: number,
+  currency: string,
+  productUrl: string,
+  settings: AISettings
+): Promise<PriceComparison[]> {
+  if (!settings.subagent_api_key || !settings.subagent_model) {
+    throw new Error('Sub-agent not configured: API key and model are required');
+  }
+
+  // Step 1: Main AI extracts a clean product identity
+  console.log(`[Sub-Agent] Step 1: Asking main AI to identify product from "${productName}"`);
+  const identity = await extractProductIdentity(productUrl, productName, settings);
+
+  // Build search context for sub-agent
+  const identifiers: string[] = [];
+  if (identity.brand) identifiers.push(`Brand: ${identity.brand}`);
+  if (identity.model) identifiers.push(`Model: ${identity.model}`);
+  if (identity.ean) identifiers.push(`EAN/SKU: ${identity.ean}`);
+  // Step 2: Sub-agent searches the web
+  const domainMatch = productUrl.match(/^https?:\/\/(?:www\.)?([^/]+)/);
+  const currentDomain = domainMatch ? domainMatch[1] : '';
+  const searchContext = [
+    `${identity.searchTerm}`,
+    ...identifiers,
+    `Current price: ${currentPrice} ${currency}`,
+    `Exclude store: ${currentDomain}`,
+  ].join('\n');
+
+  const basePrompt = settings.subagent_custom_prompt?.trim() || SUBAGENT_SEARCH_PROMPT;
+  const prompt = basePrompt + searchContext;
+
+  console.log(`[Sub-Agent] Step 2: Searching for "${identity.searchTerm}" (${currentPrice} ${currency})`);
+
+  const openai = new OpenAI({
+    apiKey: settings.subagent_api_key,
+    baseURL: OPENROUTER_BASE_URL,
+  });
+
+  const response = await openai.chat.completions.create({
+    model: settings.subagent_model,
+    messages: [{ role: 'user', content: prompt }],
+    temperature: 0.3,
+  });
+
+  const message = response.choices[0]?.message;
+  const rawContent = message?.content
+    || (message as unknown as Record<string, unknown>)?.reasoning_content as string;
+
+  if (!rawContent) {
+    console.log('[Sub-Agent] No response from model');
+    return [];
+  }
+
+  const content = stripThinkingTags(rawContent);
+  console.log(`[Sub-Agent] Raw response length: ${content.length}`);
+
+  // Extract JSON array from response (model might wrap it in markdown code blocks)
+  const jsonMatch = content.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) {
+    console.log('[Sub-Agent] No JSON array found in response');
+    return [];
+  }
+
+  const results = JSON.parse(jsonMatch[0]) as PriceComparison[];
+
+  // Validate fields
+  const validResults = results.filter(r =>
+    r.store && typeof r.price === 'number' && r.price > 0 && r.currency && r.url
+  ).slice(0, 10);
+
+  if (validResults.length === 0) return [];
+
+  // Step 3: Optionally verify URLs are reachable (parallel HEAD requests)
+  if (!settings.subagent_validate_urls) {
+    console.log(`[Sub-Agent] URL validation disabled, returning ${validResults.length} results`);
+    return validResults;
+  }
+
+  console.log(`[Sub-Agent] Step 3: Verifying ${validResults.length} URLs...`);
+  const verified = await Promise.all(
+    validResults.map(async (r) => {
+      try {
+        const res = await axios.head(r.url, {
+          timeout: 8000,
+          maxRedirects: 5,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+          },
+          validateStatus: (status: number) => status < 400,
+        });
+        return { result: r, ok: res.status < 400 };
+      } catch {
+        // HEAD might be blocked; try GET with range header as fallback
+        try {
+          const res = await axios.get(r.url, {
+            timeout: 8000,
+            maxRedirects: 5,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+              Range: 'bytes=0-0',
+            },
+            validateStatus: (status: number) => status < 400 || status === 416,
+          });
+          return { result: r, ok: res.status < 400 || res.status === 416 };
+        } catch {
+          return { result: r, ok: false };
+        }
+      }
+    })
+  );
+
+  const validUrls = verified.filter(v => v.ok).map(v => v.result);
+  const invalidCount = verified.length - validUrls.length;
+  if (invalidCount > 0) {
+    console.log(`[Sub-Agent] Filtered out ${invalidCount} unreachable URLs`);
+  }
+
+  return validUrls;
 }

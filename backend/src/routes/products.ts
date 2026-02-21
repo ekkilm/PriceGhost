@@ -1,7 +1,8 @@
 import { Router, Response } from 'express';
 import { AuthRequest, authMiddleware } from '../middleware/auth';
-import { productQueries, priceHistoryQueries, stockStatusHistoryQueries } from '../models';
+import { productQueries, priceHistoryQueries, stockStatusHistoryQueries, userQueries } from '../models';
 import { scrapeProduct, scrapeProductWithVoting, ExtractionMethod } from '../services/scraper';
+import { findBetterPrices } from '../services/ai-extractor';
 
 const router = Router();
 
@@ -292,6 +293,52 @@ router.post('/bulk/pause', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Error bulk updating pause status:', error);
     res.status(500).json({ error: 'Failed to update pause status' });
+  }
+});
+
+// Find better prices using AI sub-agent (long-running: main AI + sub-agent + URL validation)
+router.post('/:id/find-better-prices', async (req: AuthRequest, res: Response) => {
+  // Extend timeout for this multi-step AI operation (3 minutes)
+  req.setTimeout(180000);
+  res.setTimeout(180000);
+  try {
+    const userId = req.userId!;
+    const productId = parseInt(req.params.id, 10);
+
+    if (isNaN(productId)) {
+      res.status(400).json({ error: 'Invalid product ID' });
+      return;
+    }
+
+    const product = await productQueries.findById(productId, userId);
+    if (!product) {
+      res.status(404).json({ error: 'Product not found' });
+      return;
+    }
+
+    if (!product.name) {
+      res.status(400).json({ error: 'Product name is required for price search' });
+      return;
+    }
+
+    const settings = await userQueries.getAISettings(userId);
+    if (!settings?.subagent_api_key || !settings?.subagent_model) {
+      res.status(400).json({ error: 'Sub-agent not configured. Set API key and model in AI Settings.' });
+      return;
+    }
+
+    const results = await findBetterPrices(
+      product.name,
+      product.current_price || 0,
+      product.currency || 'USD',
+      product.url,
+      settings
+    );
+
+    res.json(results);
+  } catch (error) {
+    console.error('Error finding better prices:', error);
+    res.status(500).json({ error: 'Failed to search for better prices' });
   }
 });
 
