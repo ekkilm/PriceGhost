@@ -3,6 +3,7 @@ import Layout from '../components/Layout';
 import ProductCard from '../components/ProductCard';
 import ProductForm from '../components/ProductForm';
 import PriceSelectionModal from '../components/PriceSelectionModal';
+import BulkInputModal from '../components/BulkInputModal';
 import { productsApi, pricesApi, Product, PriceReviewResponse } from '../api/client';
 
 // Type guard to check if response needs review
@@ -39,6 +40,11 @@ export default function Dashboard() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSavingBulk, setIsSavingBulk] = useState(false);
   const [showBulkActions, setShowBulkActions] = useState(false);
+
+  // Bulk input modal state
+  const [bulkModal, setBulkModal] = useState<{
+    type: 'price_alert' | 'target_price' | 'check_interval';
+  } | null>(null);
 
   // Price selection modal state
   const [showPriceModal, setShowPriceModal] = useState(false);
@@ -168,34 +174,53 @@ export default function Dashboard() {
     }
   };
 
-  const handleBulkEnablePriceAlert = async () => {
-    const threshold = prompt('Enter price drop threshold (e.g., 5.00):');
-    if (!threshold) return;
-    const value = parseFloat(threshold);
-    if (isNaN(value) || value <= 0) {
-      alert('Please enter a valid positive number');
-      return;
-    }
+  const handleBulkModalConfirm = async (value: string) => {
+    if (!bulkModal) return;
+    const numValue = parseFloat(value);
 
     setIsSavingBulk(true);
-    setShowBulkActions(false);
+    setBulkModal(null);
     try {
-      await Promise.all(
-        Array.from(selectedIds).map(id =>
-          productsApi.update(id, { price_drop_threshold: value })
-        )
-      );
-      setProducts(prev =>
-        prev.map(p =>
-          selectedIds.has(p.id) ? { ...p, price_drop_threshold: value } : p
-        )
-      );
+      if (bulkModal.type === 'price_alert') {
+        await Promise.all(
+          Array.from(selectedIds).map(id =>
+            productsApi.update(id, { price_drop_threshold: numValue })
+          )
+        );
+        setProducts(prev =>
+          prev.map(p => selectedIds.has(p.id) ? { ...p, price_drop_threshold: numValue } : p)
+        );
+      } else if (bulkModal.type === 'target_price') {
+        await Promise.all(
+          Array.from(selectedIds).map(id =>
+            productsApi.update(id, { target_price: numValue })
+          )
+        );
+        setProducts(prev =>
+          prev.map(p => selectedIds.has(p.id) ? { ...p, target_price: numValue } : p)
+        );
+      } else if (bulkModal.type === 'check_interval') {
+        const interval = parseInt(value, 10);
+        await Promise.all(
+          Array.from(selectedIds).map(id =>
+            productsApi.update(id, { refresh_interval: interval })
+          )
+        );
+        setProducts(prev =>
+          prev.map(p => selectedIds.has(p.id) ? { ...p, refresh_interval: interval } : p)
+        );
+      }
       setSelectedIds(new Set());
     } catch {
       alert('Failed to update some products');
     } finally {
       setIsSavingBulk(false);
     }
+  };
+
+  const handleBulkEnablePriceAlert = () => {
+    setShowBulkActions(false);
+    setBulkModal({ type: 'price_alert' });
   };
 
   const handleBulkEnableStockAlert = async () => {
@@ -224,34 +249,14 @@ export default function Dashboard() {
     }
   };
 
-  const handleBulkSetTargetPrice = async () => {
-    const target = prompt('Enter target price (e.g., 49.99):');
-    if (!target) return;
-    const value = parseFloat(target);
-    if (isNaN(value) || value <= 0) {
-      alert('Please enter a valid positive number');
-      return;
-    }
-
-    setIsSavingBulk(true);
+  const handleBulkSetTargetPrice = () => {
     setShowBulkActions(false);
-    try {
-      await Promise.all(
-        Array.from(selectedIds).map(id =>
-          productsApi.update(id, { target_price: value })
-        )
-      );
-      setProducts(prev =>
-        prev.map(p =>
-          selectedIds.has(p.id) ? { ...p, target_price: value } : p
-        )
-      );
-      setSelectedIds(new Set());
-    } catch {
-      alert('Failed to update some products');
-    } finally {
-      setIsSavingBulk(false);
-    }
+    setBulkModal({ type: 'target_price' });
+  };
+
+  const handleBulkSetCheckInterval = () => {
+    setShowBulkActions(false);
+    setBulkModal({ type: 'check_interval' });
   };
 
   const handleBulkPause = async () => {
@@ -761,6 +766,39 @@ export default function Dashboard() {
         url={priceReviewData?.url || ''}
       />
 
+      <BulkInputModal
+        isOpen={!!bulkModal}
+        onClose={() => setBulkModal(null)}
+        onConfirm={handleBulkModalConfirm}
+        count={selectedIds.size}
+        title={
+          bulkModal?.type === 'price_alert' ? 'Set Price Drop Alert'
+          : bulkModal?.type === 'target_price' ? 'Set Target Price'
+          : 'Set Check Interval'
+        }
+        description={
+          bulkModal?.type === 'price_alert' ? 'Alert when price drops by this amount or more.'
+          : bulkModal?.type === 'target_price' ? 'Alert when price reaches this target.'
+          : 'How often to check for price changes.'
+        }
+        type={bulkModal?.type === 'check_interval' ? 'select' : 'number'}
+        placeholder={
+          bulkModal?.type === 'price_alert' ? 'e.g. 5.00'
+          : bulkModal?.type === 'target_price' ? 'e.g. 49.99'
+          : undefined
+        }
+        options={bulkModal?.type === 'check_interval' ? [
+          { value: '900', label: '15 minutes' },
+          { value: '1800', label: '30 minutes' },
+          { value: '3600', label: '1 hour' },
+          { value: '7200', label: '2 hours' },
+          { value: '14400', label: '4 hours' },
+          { value: '21600', label: '6 hours' },
+          { value: '43200', label: '12 hours' },
+          { value: '86400', label: '24 hours' },
+        ] : undefined}
+      />
+
       {error && <div className="alert alert-error">{error}</div>}
 
       {/* Dashboard Summary */}
@@ -905,6 +943,13 @@ export default function Dashboard() {
                     <path d="m9 12 2 2 4-4" />
                   </svg>
                   Enable Stock Alerts
+                </button>
+                <button onClick={handleBulkSetCheckInterval}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                  </svg>
+                  Set Check Interval
                 </button>
                 <hr />
                 <button onClick={handleBulkPause}>

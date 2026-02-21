@@ -4,6 +4,7 @@ import Layout from '../components/Layout';
 import PriceChart from '../components/PriceChart';
 import StockTimeline from '../components/StockTimeline';
 import AIStatusBadge from '../components/AIStatusBadge';
+import PriceSelectionModal from '../components/PriceSelectionModal';
 import { useToast } from '../context/ToastContext';
 import {
   productsApi,
@@ -12,6 +13,9 @@ import {
   ProductWithStats,
   PriceHistory,
   NotificationSettings,
+  AISettings,
+  PriceComparison,
+  PriceReviewResponse,
 } from '../api/client';
 import { formatPrice as formatCurrency } from '../utils/formatCurrency';
 
@@ -33,6 +37,13 @@ export default function ProductDetail() {
   const [notifyBackInStock, setNotifyBackInStock] = useState(false);
   const [aiVerificationDisabled, setAiVerificationDisabled] = useState(false);
   const [aiExtractionDisabled, setAiExtractionDisabled] = useState(false);
+  const [aiSettings, setAiSettings] = useState<AISettings | null>(null);
+  const [betterPrices, setBetterPrices] = useState<PriceComparison[]>([]);
+  const [isSearchingPrices, setIsSearchingPrices] = useState(false);
+  const [priceSearchError, setPriceSearchError] = useState('');
+  const [trackingUrls, setTrackingUrls] = useState<Record<string, 'loading' | 'added' | 'error'>>({});
+  const [showPriceModal, setShowPriceModal] = useState(false);
+  const [priceReviewData, setPriceReviewData] = useState<PriceReviewResponse | null>(null);
 
   const REFRESH_INTERVALS = [
     { value: 300, label: '5 minutes' },
@@ -83,10 +94,20 @@ export default function ProductDetail() {
     }
   };
 
+  const fetchAISettings = async () => {
+    try {
+      const response = await settingsApi.getAI();
+      setAiSettings(response.data);
+    } catch {
+      // Silently fail
+    }
+  };
+
   useEffect(() => {
     if (productId) {
       fetchData(30);
       fetchNotificationSettings();
+      fetchAISettings();
     }
   }, [productId]);
 
@@ -118,6 +139,57 @@ export default function ProductDetail() {
 
   const handleRangeChange = (days: number | undefined) => {
     fetchData(days);
+  };
+
+  const handleFindBetterPrices = async () => {
+    setIsSearchingPrices(true);
+    setPriceSearchError('');
+    setBetterPrices([]);
+    try {
+      const response = await productsApi.findBetterPrices(productId);
+      setBetterPrices(response.data);
+      if (response.data.length === 0) {
+        setPriceSearchError('No alternative prices found.');
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to search for prices';
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      setPriceSearchError(axiosErr.response?.data?.error || msg);
+    } finally {
+      setIsSearchingPrices(false);
+    }
+  };
+
+  const handleTrackProduct = async (url: string) => {
+    setTrackingUrls(prev => ({ ...prev, [url]: 'loading' }));
+    try {
+      const response = await productsApi.create(url);
+      if ('needsReview' in response.data && response.data.needsReview) {
+        setPriceReviewData(response.data as PriceReviewResponse);
+        setShowPriceModal(true);
+        setTrackingUrls(prev => { const next = { ...prev }; delete next[url]; return next; });
+        return;
+      }
+      setTrackingUrls(prev => ({ ...prev, [url]: 'added' }));
+      showToast('Product added to tracking!', 'success');
+    } catch {
+      setTrackingUrls(prev => ({ ...prev, [url]: 'error' }));
+      showToast('Failed to add product', 'error');
+    }
+  };
+
+  const handleTrackPriceSelected = async (selectedPrice: number, selectedMethod: string, _currency: string) => {
+    if (!priceReviewData) return;
+    try {
+      await productsApi.create(priceReviewData.url, undefined, selectedPrice, selectedMethod);
+      setTrackingUrls(prev => ({ ...prev, [priceReviewData.url]: 'added' }));
+      showToast('Product added to tracking!', 'success');
+    } catch {
+      setTrackingUrls(prev => ({ ...prev, [priceReviewData.url]: 'error' }));
+      showToast('Failed to add product', 'error');
+    }
+    setShowPriceModal(false);
+    setPriceReviewData(null);
   };
 
   const handleRefreshIntervalChange = async (newInterval: number) => {
@@ -240,6 +312,28 @@ export default function ProductDetail() {
         @media (max-width: 768px) {
           .product-detail-content {
             grid-template-columns: 1fr;
+          }
+
+          .product-detail-actions {
+            flex-wrap: wrap;
+          }
+
+          .product-detail-actions .btn {
+            flex: 1 1 auto;
+            min-width: 0;
+            font-size: 0.875rem;
+            padding: 0.625rem 0.75rem;
+            text-align: center;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .product-detail-actions {
+            flex-direction: column;
+          }
+
+          .product-detail-actions .btn {
+            width: 100%;
           }
         }
 
@@ -514,6 +608,16 @@ export default function ProductDetail() {
                   'Refresh Price Now'
                 )}
               </button>
+              {aiSettings?.subagent_api_key && aiSettings?.subagent_model && (
+                <button
+                  className="btn btn-secondary"
+                  onClick={handleFindBetterPrices}
+                  disabled={isSearchingPrices}
+                  style={isSearchingPrices ? { opacity: 0.7, cursor: 'not-allowed' } : undefined}
+                >
+                  {isSearchingPrices ? 'Searching prices...' : 'Find Better Prices'}
+                </button>
+              )}
               <button className="btn btn-danger" onClick={handleDelete}>
                 Stop Tracking
               </button>
@@ -521,6 +625,199 @@ export default function ProductDetail() {
           </div>
         </div>
       </div>
+
+      {(betterPrices.length > 0 || priceSearchError) && (
+        <>
+          <style>{`
+            .better-prices-card {
+              background: var(--surface);
+              border-radius: 0.75rem;
+              box-shadow: var(--shadow);
+              padding: 1.5rem;
+              margin-bottom: 2rem;
+            }
+
+            .better-prices-header {
+              display: flex;
+              align-items: center;
+              gap: 0.75rem;
+              margin-bottom: 1rem;
+            }
+
+            .better-prices-title {
+              font-size: 1.125rem;
+              font-weight: 600;
+              color: var(--text);
+              margin: 0;
+            }
+
+            .better-prices-list {
+              display: flex;
+              flex-direction: column;
+              gap: 0.5rem;
+            }
+
+            .better-prices-item {
+              display: flex;
+              align-items: center;
+              padding: 0.75rem 1rem;
+              background: var(--background);
+              border-radius: 0.5rem;
+              gap: 0.75rem;
+            }
+
+            .better-prices-item-store {
+              font-weight: 500;
+              color: var(--text);
+              flex: 1;
+              min-width: 0;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+            }
+
+            .better-prices-item-price {
+              font-weight: 700;
+              font-size: 1rem;
+              white-space: nowrap;
+              flex-shrink: 0;
+            }
+
+            .better-prices-item-price.cheaper {
+              color: #16a34a;
+            }
+
+            .better-prices-item-price.same {
+              color: var(--text-muted);
+            }
+
+            .better-prices-item-price.expensive {
+              color: #dc2626;
+            }
+
+            .better-prices-item-actions {
+              display: flex;
+              align-items: center;
+              gap: 0.25rem;
+              flex-shrink: 0;
+            }
+
+            .better-prices-item-link {
+              color: var(--primary);
+              font-size: 0.875rem;
+              white-space: nowrap;
+              padding: 0.25rem 0.5rem;
+              min-height: 2.5rem;
+              display: inline-flex;
+              align-items: center;
+            }
+
+            .better-prices-item-track {
+              background: none;
+              border: 1px solid var(--primary);
+              color: var(--primary);
+              font-size: 0.8125rem;
+              padding: 0.25rem 0.625rem;
+              border-radius: 0.375rem;
+              cursor: pointer;
+              white-space: nowrap;
+              min-height: 2.5rem;
+              display: inline-flex;
+              align-items: center;
+            }
+
+            .better-prices-item-track:hover:not(:disabled) {
+              background: var(--primary);
+              color: white;
+            }
+
+            .better-prices-item-track:disabled {
+              opacity: 0.6;
+              cursor: default;
+            }
+
+            .better-prices-error {
+              color: var(--text-muted);
+              font-size: 0.875rem;
+            }
+
+            @media (max-width: 480px) {
+              .better-prices-card {
+                padding: 1rem;
+              }
+
+              .better-prices-item {
+                flex-wrap: wrap;
+                padding: 0.625rem 0.75rem;
+                gap: 0.25rem 0.75rem;
+              }
+
+              .better-prices-item-store {
+                flex: 1 1 100%;
+                font-size: 0.875rem;
+              }
+
+              .better-prices-item-price {
+                font-size: 0.9375rem;
+              }
+
+              .better-prices-item-actions {
+                margin-left: auto;
+              }
+            }
+          `}</style>
+
+          <div className="better-prices-card">
+            <div className="better-prices-header">
+              <span style={{ fontSize: '1.5rem' }}>🔍</span>
+              <h2 className="better-prices-title">Price Comparison</h2>
+            </div>
+
+            {priceSearchError && (
+              <p className="better-prices-error">{priceSearchError}</p>
+            )}
+
+            {betterPrices.length > 0 && (
+              <div className="better-prices-list">
+                {betterPrices.map((result, i) => {
+                  const currentPrice = product.current_price;
+                  const priceClass = !currentPrice ? ''
+                    : result.price < currentPrice ? 'cheaper'
+                    : result.price > currentPrice ? 'expensive' : 'same';
+                  return (
+                    <div key={i} className="better-prices-item">
+                      <span className="better-prices-item-store">{result.store}</span>
+                      <span className={`better-prices-item-price ${priceClass}`}>
+                        {formatCurrency(result.price, result.currency)}
+                      </span>
+                      <div className="better-prices-item-actions">
+                        <a
+                          className="better-prices-item-link"
+                          href={result.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Visit →
+                        </a>
+                        <button
+                          type="button"
+                          className="better-prices-item-track"
+                          onClick={() => handleTrackProduct(result.url)}
+                          disabled={trackingUrls[result.url] === 'loading' || trackingUrls[result.url] === 'added'}
+                        >
+                          {trackingUrls[result.url] === 'loading' ? 'Adding...'
+                            : trackingUrls[result.url] === 'added' ? '✓ Added'
+                            : '+ Track'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       <PriceChart
         prices={prices}
@@ -883,6 +1180,22 @@ export default function ProductDetail() {
           </button>
         </div>
       </div>
+      <PriceSelectionModal
+        isOpen={showPriceModal}
+        onClose={() => {
+          if (priceReviewData) {
+            setTrackingUrls(prev => { const next = { ...prev }; delete next[priceReviewData.url]; return next; });
+          }
+          setShowPriceModal(false);
+          setPriceReviewData(null);
+        }}
+        onSelect={handleTrackPriceSelected}
+        productName={priceReviewData?.name || null}
+        imageUrl={priceReviewData?.imageUrl || null}
+        candidates={priceReviewData?.priceCandidates || []}
+        suggestedPrice={priceReviewData?.suggestedPrice || null}
+        url={priceReviewData?.url || ''}
+      />
     </Layout>
   );
 }

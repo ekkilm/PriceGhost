@@ -142,6 +142,9 @@ export const productsApi = {
 
   bulkPause: (ids: number[], paused: boolean) =>
     api.post<{ message: string; updated: number }>('/products/bulk/pause', { ids, paused }),
+
+  findBetterPrices: (id: number) =>
+    api.post<PriceComparison[]>(`/products/${id}/find-better-prices`, {}, { timeout: 180000 }),
 };
 
 // Prices API
@@ -265,6 +268,10 @@ export const settingsApi = {
     gemini_model?: string | null;
     openrouter_api_key?: string | null;
     openrouter_model?: string | null;
+    subagent_api_key?: string | null;
+    subagent_model?: string | null;
+    subagent_validate_urls?: boolean;
+    subagent_custom_prompt?: string | null;
   }) => api.put<AISettings & { message: string }>('/settings/ai', data),
 
   testAI: (url: string) =>
@@ -278,6 +285,9 @@ export const settingsApi = {
 
   testOpenRouter: (apiKey: string, model?: string) =>
     api.post<{ success: boolean; message?: string; error?: string }>('/settings/ai/test-openrouter', { api_key: apiKey, model }),
+
+  testSubAgent: (apiKey: string, model: string) =>
+    api.post<{ success: boolean; message?: string; error?: string }>('/settings/ai/test-subagent', { api_key: apiKey, model }),
 };
 
 // AI Settings types
@@ -295,6 +305,17 @@ export interface AISettings {
   gemini_model: string | null;
   openrouter_api_key: string | null;
   openrouter_model: string | null;
+  subagent_api_key: string | null;
+  subagent_model: string | null;
+  subagent_validate_urls: boolean;
+  subagent_custom_prompt: string | null;
+}
+
+export interface PriceComparison {
+  store: string;
+  price: number;
+  currency: string;
+  url: string;
 }
 
 export interface OllamaTestResult {
